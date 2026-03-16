@@ -1,0 +1,24 @@
+// https://code.visualstudio.com/docs/editor/workspaces
+{
+	"folders": [
+		{
+			"path": "assets",
+		},
+		{
+			"path": ".",
+			"name": "/",
+		},
+	],
+	"settings": {
+		"files.exclude": {
+			".vscode/chrome": true,
+			"assets": true,
+			"build": true,
+			"library": true,
+			"local": true,
+			"temp": true,
+			"**/.git": true,
+		},
+		"editor.insertSpaces": false,
+	},
+}
