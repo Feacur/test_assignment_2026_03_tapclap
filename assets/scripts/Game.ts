@@ -1,8 +1,10 @@
 import { BlockType, BlockTypeGenerator, BlockTypeUtils, BlockTypeValue } from "./BlockType"
-import { GameProxy } from "./GameProxy";
+import { EventType, GameProxy } from "./GameProxy";
 
 enum GameState {
 	None = 0,
+	Spawn,
+	Move,
 	Input,
 	Process,
 	Anim,
@@ -17,6 +19,7 @@ export class Game {
 	private blocks: BlockType[] = null
 	private skips: boolean[] = null
 
+	private inits: number = 0;
 	private moves: number = 0;
 	private score: number = 0;
 
@@ -33,7 +36,8 @@ export class Game {
 
 	// API:
 
-	generateBlocks(): void {
+	reinitBlocks(): void {
+		this.inits += 1;
 		for (let y = 0; y < this.size.y; y++) {
 			for (let x = 0; x < this.size.x; x++) {
 				const index = this.getIndex(x, y);
@@ -45,7 +49,7 @@ export class Game {
 		if (this.proxy != null) {
 			for (let index = 0; index < this.blocks.length; index++) {
 				const blockType = this.blocks[index];
-				this.proxyUpdateBlock(index, blockType, blockType);
+				this.proxyUpdateBlock(index, blockType, EventType.Init);
 			}
 			this.proxy.updateMoves(this.moves);
 			this.proxy.updateScore(this.score);
@@ -68,6 +72,8 @@ export class Game {
 			const previousState = this.state;
 			switch (previousState) {
 				case GameState.None:    this.doStateNone();    break;
+				case GameState.Spawn:   this.doStateSpawn();   break;
+				case GameState.Move:    this.doStateMove();    break;
 				case GameState.Input:   this.doStateInput();   break;
 				case GameState.Process: this.doStateProcess(); break;
 				case GameState.Anim:    this.doStateAnim();    break;
@@ -82,13 +88,57 @@ export class Game {
 
 	private doStateNone(): void {
 		this.queue.length = 0;
-		this.state = GameState.Input;
+		this.state = GameState.Spawn;
+	}
+
+	private doStateSpawn(): void {
+		let spawned = false;
+
+		for (let index = this.blocks.length - this.size.x; index < this.blocks.length; index++) {
+			const blockType = this.blocks[index];
+			if (blockType == BlockType.None) {
+				const nextBlockType = BlockTypeGenerator.generate();
+				this.blocks[index] = nextBlockType;
+				if (this.proxy != null)
+					this.proxyUpdateBlock(index, nextBlockType, EventType.Spawn);
+				spawned = true;
+			}
+		}
+
+		this.state = spawned
+			? GameState.Anim
+			: GameState.Move;
+	}
+
+	private doStateMove(): void {
+		let moved = false;
+
+		for (let sourceIdx = this.size.x; sourceIdx < this.blocks.length; sourceIdx++) {
+			const targetIdx = sourceIdx  - this.size.x;
+			const targetType = this.blocks[targetIdx];
+			const sourceType = this.blocks[sourceIdx];
+			if (BlockTypeUtils.isMovable(sourceType) && BlockTypeUtils.isReplaceable(targetType)) {
+				const emptyType = BlockTypeUtils.getEmpty(sourceType);
+				this.blocks[targetIdx] = sourceType;
+				this.blocks[sourceIdx] = emptyType;
+				if (this.proxy != null) {
+					this.proxyUpdateBlock(targetIdx, sourceType, EventType.Fill);
+					this.proxyUpdateBlock(sourceIdx, emptyType, EventType.Move);
+				}
+				moved = true;
+			}
+		}
+
+		this.state = moved
+			? GameState.Anim
+			: GameState.Input;
 	}
 
 	private doStateInput(): void {
 		if (this.queue.length == 0) return;
 		this.moves += 1;
-		this.proxy?.updateMoves(this.moves);
+		if (this.proxy != null)
+			this.proxy.updateMoves(this.moves);
 		this.state = GameState.Process;
 	}
 
@@ -106,27 +156,14 @@ export class Game {
 				this.blocks[index] = nextBlockType;
 
 				if (this.proxy != null)
-					this.proxyUpdateBlock(index, blockType, nextBlockType);
+					this.proxyUpdateBlock(index, nextBlockType, EventType.Wipe);
 			}
 
 			switch (blockType) {
-				case BlockType.BombTiny: {
-					const radius: number = 1;
-					this.doProcessArea(index, radius);
-				} break;
-	
-				case BlockType.BombHuge: {
-					const radius: number = 2;
-					this.doProcessArea(index, radius);
-				} break;
-	
-				case BlockType.RocketsVertical: {
-					this.doProcessVertical(index);
-				} break;
-	
-				case BlockType.RocketsHorizontal: {
-					this.doProcessHorizontal(index);
-				} break;
+				case BlockType.BombTiny:          this.doProcessArea(index, BlockTypeUtils.getWipeRadius(blockType)); break;
+				case BlockType.BombHuge:          this.doProcessArea(index, BlockTypeUtils.getWipeRadius(blockType)); break;
+				case BlockType.RocketsVertical:   this.doProcessVertical(index);                                      break;
+				case BlockType.RocketsHorizontal: this.doProcessHorizontal(index);                                    break;
 			}
 		}
 
@@ -134,8 +171,10 @@ export class Game {
 	}
 
 	private doStateAnim(): void {
-		if (this.proxy?.waitForAnim()) return;
-		this.proxy?.updateScore(this.score);
+		if (this.proxy != null) {
+			if (this.proxy.waitForAnim()) return;
+			this.proxy.updateScore(this.score);
+		}
 		this.state = GameState.None;
 	}
 
@@ -261,9 +300,9 @@ export class Game {
 			this.skips[i] = false;
 	}
 
-	private proxyUpdateBlock(index: number, prev: BlockType, next: BlockType): void {
+	private proxyUpdateBlock(index: number, blockType: BlockType, eventType: EventType): void {
 		const x = index % this.size.x;
 		const y = Math.floor(index / this.size.x);
-		this.proxy.updateBlock(x, y, prev, next);
+		this.proxy.updateBlock(x, y, blockType, eventType);
 	}
 }

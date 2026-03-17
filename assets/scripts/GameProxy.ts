@@ -1,8 +1,16 @@
 import { BlockType } from "./BlockType";
-import { Game } from "./Game";
+
+export enum EventType {
+	None = 0,
+	Init,
+	Spawn,
+	Wipe,
+	Move,
+	Fill,
+};
 
 interface BlockDelegate {
-	(x: number, y: number, was: BlockType, now: BlockType): void;
+	(x: number, y: number, blockType: BlockType, eventType: EventType): void;
 }
 
 interface NumberDelegate {

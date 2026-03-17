@@ -79,8 +79,8 @@ export abstract class BlockTypeUtils {
 		}
 		return false;
 	}
-	static match(value1: BlockType, value2: BlockType): boolean {
-		return value1 == value2;
+	static match(aType: BlockType, bType: BlockType): boolean {
+		return aType == bType;
 	}
 
 	static isDestructible(blockType: BlockType): boolean {
@@ -89,5 +89,33 @@ export abstract class BlockTypeUtils {
 				return false;
 		}
 		return true;
+	}
+
+	static isMovable(blockType: BlockType): boolean {
+		switch (blockType) {
+			case BlockType.None:
+				return false;
+		}
+		return true;
+	}
+
+	static isReplaceable(blockType: BlockType): boolean {
+		switch (blockType) {
+			case BlockType.None:
+				return true;
+		}
+		return false;
+	}
+
+	static getEmpty(sourceBlockType: BlockType): BlockType {
+		return BlockType.None;
+	}
+
+	static getWipeRadius(blockType: BlockType): number {
+		switch (blockType) {
+			case BlockType.BombTiny: return 1;
+			case BlockType.BombHuge: return 2;
+		}
+		return 0;
 	}
 }

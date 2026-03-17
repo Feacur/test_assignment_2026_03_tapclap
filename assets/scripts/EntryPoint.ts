@@ -7,7 +7,7 @@
 
 import { BlockType } from "./BlockType";
 import { Game } from "./Game";
-import { GameProxy } from "./GameProxy";
+import { EventType, GameProxy } from "./GameProxy";
 
 const {ccclass, property} = cc._decorator;
 
@@ -77,8 +77,8 @@ export default class EntryPoint extends cc.Component {
 		if (this.gridSize.y > 9) this.gridSize.y = 9;
 
 		this.gameProxy = new GameProxy();
-		this.gameProxy.updateBlock = (x: number, y: number, was: BlockType, now: BlockType) => {
-			this.updateBlock(x, y, now);
+		this.gameProxy.updateBlock = (x: number, y: number, blockType: BlockType, eventType: EventType) => {
+			this.updateBlock(x, y, blockType);
 		}
 		this.gameProxy.updateMoves = (value: number): void => { this.updateMoves(value); }
 		this.gameProxy.updateScore = (value: number): void => { this.updateScore(value); }
@@ -149,7 +149,7 @@ export default class EntryPoint extends cc.Component {
 		}
 
 		this.game = new Game(this.gridSize, this.gameProxy);
-		this.game.generateBlocks();
+		this.game.reinitBlocks();
 	}
 
 	private updateBlock (x: number, y: number, blockType: BlockType): void {
