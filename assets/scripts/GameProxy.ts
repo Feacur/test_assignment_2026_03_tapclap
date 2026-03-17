@@ -1,15 +1,21 @@
 import { BlockType } from "./BlockType";
+import { Game } from "./Game";
 
-interface BlockCallback {
-	(x: number, y: number, blockType: BlockType);
+interface BlockDelegate {
+	(x: number, y: number, was: BlockType, now: BlockType): void;
 }
 
-interface NumberCallback {
-	(value: number);
+interface NumberDelegate {
+	(value: number): void;
+}
+
+interface GetBoolDelegate {
+	(): boolean;
 }
 
 export class GameProxy {
-	setBlockCallback: BlockCallback = null;
-	updateMovesCallback: NumberCallback = null;
-	updateScoreCallback: NumberCallback = null;
+	updateBlock: BlockDelegate = null;
+	updateMoves: NumberDelegate = null;
+	updateScore: NumberDelegate = null;
+	waitForAnim: GetBoolDelegate = null;
 }

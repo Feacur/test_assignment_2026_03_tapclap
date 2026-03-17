@@ -2,8 +2,8 @@
 //  - https://docs.cocos.com/creator/2.4/manual/en/scripting/typescript.html
 // Learn Attribute:
 //  - https://docs.cocos.com/creator/2.4/manual/en/scripting/reference/attributes.html
-// Learn life-cycle callbacks:
-//  - https://docs.cocos.com/creator/2.4/manual/en/scripting/life-cycle-callbacks.html
+// Learn life-cycle s:
+//  - https://docs.cocos.com/creator/2.4/manual/en/scripting/life-cycle-s.html
 
 import { BlockType } from "./BlockType";
 import { Game } from "./Game";
@@ -48,9 +48,9 @@ export default class EntryPoint extends cc.Component {
 	private blocks: cc.Node[] = null;
 	private game: Game = null;
 
-	// LIFE-CYCLE CALLBACKS:
+	// LIFE-CYCLE:
 
-	onLoad () {
+	onLoad(): void {
 		this.grid.node.on(cc.Node.EventType.TOUCH_START, this.onTouchStart, this, true);
 
 		const boosterTeleEventHandler = new cc.Component.EventHandler();
@@ -77,24 +77,29 @@ export default class EntryPoint extends cc.Component {
 		if (this.gridSize.y > 9) this.gridSize.y = 9;
 
 		this.gameProxy = new GameProxy();
-		this.gameProxy.setBlockCallback = (x: number, y: number, blockType: BlockType) => { this.setBlockType(x, y, blockType); }
-		this.gameProxy.updateMovesCallback = (moves: number) => { this.updateMoves(moves); }
-		this.gameProxy.updateScoreCallback = (score: number) => { this.updateScore(score); }
+		this.gameProxy.updateBlock = (x: number, y: number, was: BlockType, now: BlockType) => {
+			this.updateBlock(x, y, now);
+		}
+		this.gameProxy.updateMoves = (value: number): void => { this.updateMoves(value); }
+		this.gameProxy.updateScore = (value: number): void => { this.updateScore(value); }
+		this.gameProxy.waitForAnim = (): boolean => {
+			return false;
+		}
 	}
 
-	start () {
+	start(): void {
 		this.grid.node.width = this.gridSize.x * this.getCellWidth() + (this.grid.paddingLeft + this.grid.paddingRight);
 		this.grid.node.height = this.gridSize.y * this.getCellHeight() + (this.grid.paddingBottom + this.grid.paddingTop);
 		this.initializeGame();
 	}
 
-	update (dt: number) {
+	update(dt: number): void {
 		this.game.tick(dt);
 	}
 
 	// INPUT:
 
-	private onTouchStart(event: cc.Event.EventTouch) {
+	private onTouchStart(event: cc.Event.EventTouch): void {
 		const pos = event.touch.getLocation();
 		// @fixme dunno how to properly get local position
 		// position is a vector offset to the anchor
@@ -110,29 +115,31 @@ export default class EntryPoint extends cc.Component {
 			this.game.inputTouchBlock(x, y);
 	}
 
-	private boosterTeleOnClick (event: Event, customEventData: string) {
+	private boosterTeleOnClick (event: Event, customEventData: string): void {
 		console.log("clicked booster tele");
 	}
 	
-	private boosterBombOnClick (event: Event, customEventData: string) {
+	private boosterBombOnClick (event: Event, customEventData: string): void {
 		console.log("clicked booster bomb");
 	}
 
 	// LOGIC:
 
-	private initializeGame () {
+	private initializeGame (): void {
 		// @todo reuse blocks on reinit or at least despawn them
 		this.blocks = new Array(this.gridSize.x * this.gridSize.y);
 		for (let y = 0; y < this.gridSize.y; y++) {
 			for (let x = 0; x < this.gridSize.x; x++) {
 				const instance = cc.instantiate(this.gridPrefab);
-				this.blocks[this.gridSize.x * y + x] = instance;
+				const index = this.getIndex(x, y);
+				this.blocks[index] = instance;
 			}
 		}
 
 		for (let y = 0; y < this.gridSize.y; y++) {
 			for (let x = 0; x < this.gridSize.x; x++) {
-				let instance = this.blocks[this.gridSize.x * y + x];
+				const index = this.getIndex(x, y);
+				let instance = this.blocks[index];
 				instance.parent = this.grid.node;
 				instance.setPosition(
 					x * this.getCellWidth() + this.grid.paddingLeft,
@@ -145,21 +152,29 @@ export default class EntryPoint extends cc.Component {
 		this.game.generateBlocks();
 	}
 
-	private setBlockType (x: number, y: number, blockType: BlockType) {
-		const instance = this.blocks[this.gridSize.x * y + x];
-		const sprite = instance.getComponent(cc.Sprite);
-		sprite.spriteFrame = this.blockSpriteFrames[blockType];
+	private updateBlock (x: number, y: number, blockType: BlockType): void {
+		if (x >= 0 && x < this.gridSize.x && y >= 0 && y < this.gridSize.y) {
+			const index = this.getIndex(x, y);
+			const instance = this.blocks[index];
+			const sprite = instance.getComponent(cc.Sprite);
+			sprite.spriteFrame = this.blockSpriteFrames[blockType];
+		}
 	}
 
-	private updateMoves(moves: number) {
+	private updateMoves(moves: number): void {
 		this.moves.string = moves.toString();
 	}
 
-	private updateScore(score: number) {
+	private updateScore(score: number): void {
 		this.score.string = score.toString();
 	}
 
 	// HELPERS:
+
+	private getIndex(x: number, y: number) {
+		const ret = y * this.gridSize.x + x;
+		return ret;
+	}
 
 	private getCellWidth(): number {
 		return this.grid.cellSize.width + this.grid.spacingX;
