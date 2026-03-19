@@ -125,16 +125,27 @@ export class Game {
 	}
 
 	private doStateInput(): void {
-		if (this.queue.length == 0) return;
-		this.moves += 1;
-		if (this.proxy != null)
-			this.proxy.updateMoves(this.moves);
-		this.state = GameState.Process;
+		if (this.queue.length == 0)
+			return; // @note idle
+
+		this.preprocessInputQueue();
+		if (this.verifyInputQueue()) {
+			this.moves += 1;
+			if (this.proxy != null)
+				this.proxy.updateMoves(this.moves);
+			this.state = GameState.Process;
+		}
+		else {
+			if (this.proxy != null) {
+				let index = this.queue[0];
+				const blockType = this.blocks[index];
+				this.proxyUpdateBlock(EventType.Errr, index, blockType, index, blockType);
+			}
+			this.state = GameState.Anim;
+		}
 	}
 
 	private doStateProcess(): void {
-		this.doProcessBuildInitialQueue();
-
 		for (let it = 0; it < this.queue.length; it++) {
 			const index = this.queue[it];
 			const blockType = this.blocks[index];
@@ -161,7 +172,7 @@ export class Game {
 	}
 
 	private doStateAnim(): void {
-		if (this.proxy != null) {
+		if (this.proxy != null) { // @note idle
 			if (this.proxy.waitForAnim()) return;
 			this.proxy.updateScore(this.score);
 		}
@@ -207,22 +218,30 @@ export class Game {
 
 	// PROCESSING:
 
-	private doProcessBuildInitialQueue(): void {
+	private preprocessInputQueue(): void {
 		let index = this.queue[0];
 		const blockType = this.blocks[index];
-		if (!BlockTypeUtils.isFloodFillable(blockType)) return;
-
-		this.skips[index] = true;
-		for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
-			this.queueOffsetMatching(index, -1,  0, blockType);
-			this.queueOffsetMatching(index,  1,  0, blockType);
-			this.queueOffsetMatching(index,  0, -1, blockType);
-			this.queueOffsetMatching(index,  0,  1, blockType);
-
-			if (nextIt >= this.queue.length) break;
-			index = this.queue[nextIt];
+		
+		if (BlockTypeUtils.isFloodFillable(blockType)) {
+			this.skips[index] = true;
+			for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
+				this.queueOffsetMatching(index, -1,  0, blockType);
+				this.queueOffsetMatching(index,  1,  0, blockType);
+				this.queueOffsetMatching(index,  0, -1, blockType);
+				this.queueOffsetMatching(index,  0,  1, blockType);
+	
+				if (nextIt >= this.queue.length) break;
+				index = this.queue[nextIt];
+			}
+			this.resetSkips();
 		}
-		this.resetSkips();
+	}
+
+	private verifyInputQueue(): boolean {
+		let index = this.queue[0];
+		const blockType = this.blocks[index];
+		const minBlocksCountForWipe = BlockTypeUtils.getMinBlocksCountForWipe(blockType);
+		return this.queue.length >= minBlocksCountForWipe;
 	}
 
 	private doProcessArea(center: number, radius: number): void {

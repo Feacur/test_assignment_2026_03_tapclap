@@ -76,6 +76,18 @@ export abstract class BlockTypeUtils {
 		return true;
 	}
 
+	static getMinBlocksCountForWipe(blockType: BlockType): number {
+		switch (blockType) {
+			case BlockType.Blue:
+			case BlockType.Green:
+			case BlockType.Purple:
+			case BlockType.Red:
+			case BlockType.Yellow:
+				return 2;
+		}
+		return 1;
+	}
+
 	static matchFloodFill(aType: BlockType, bType: BlockType): boolean {
 		return aType == bType;
 	}

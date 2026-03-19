@@ -2,11 +2,12 @@ import { BlockType } from "./BlockType";
 
 export enum EventType {
 	None = 0,
+	Errr, // processing can't be started
 	Init, // initial or reshuffle
 	Fill, // created during gameplay
 	Wipe, // destroyed by actions
-	Move, // changed position
 	Yank, // move leftovers
+	Move, // changed position
 };
 
 interface BlockDelegate {

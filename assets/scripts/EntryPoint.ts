@@ -24,6 +24,7 @@ class Message {
 
 	getDuration(): number {
 		switch (this.eventType) {
+			case EventType.Errr: return 0.1;
 			case EventType.Fill: return 0.1;
 			case EventType.Wipe: return 0.2;
 			case EventType.Move: return 0.1;
@@ -287,6 +288,12 @@ export default class EntryPoint extends cc.Component {
 			}
 
 			switch (message.eventType) {
+				case EventType.Errr: {
+					const amplitude = 20;
+					const frequency = Math.PI * 2;
+					instance.rotation = amplitude * Math.sin(frequency * progress);
+				} break;
+
 				case EventType.Init:
 				case EventType.Fill:
 					instance.scale = progress;
