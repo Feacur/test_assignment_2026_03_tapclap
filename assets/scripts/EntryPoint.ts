@@ -11,17 +11,25 @@ import { EventType, GameProxy } from "./GameProxy";
 
 const {ccclass, property} = cc._decorator;
 
-class Message {
+class Block {
 	x: number;
 	y: number;
-	blockType: BlockType;
+	type: BlockType;
+}
+
+class Message {
 	eventType: EventType;
+	source: Block = new Block();
+	target: Block = new Block();
 
 	getDuration(): number {
 		switch (this.eventType) {
-			case EventType.Init: return 0;
+			case EventType.Fill: return 0.1;
+			case EventType.Wipe: return 0.2;
+			case EventType.Move: return 0.1;
+			case EventType.Yank: return 0.1;
 		}
-		return 0.2;
+		return 0;
 	}
 }
 
@@ -50,7 +58,7 @@ export default class EntryPoint extends cc.Component {
 	grid: cc.Layout = null;
 
 	@property(cc.Prefab)
-	gridPrefab: cc.Prefab = null;
+	blockPrefab: cc.Prefab = null;
 
 	@property(cc.SpriteFrame)
 	blockSpriteFrames: cc.SpriteFrame[] = new Array(BlockType.__COUNT__);
@@ -95,9 +103,14 @@ export default class EntryPoint extends cc.Component {
 		if (this.gridSize.y > 9) this.gridSize.y = 9;
 
 		this.gameProxy = new GameProxy();
-		this.gameProxy.updateBlock = (x: number, y: number, blockType: BlockType, eventType: EventType) => {
-			this.updateBlock(x, y, blockType);
-			this.pushMessage(x, y, blockType, eventType);
+		this.gameProxy.updateBlock = (eventType: EventType,
+			sourceX: number, sourceY: number, sourceType: BlockType,
+			targetX: number, targetY: number, targetType: BlockType
+		) => {
+			this.pushMessage(eventType,
+				sourceX, sourceY, sourceType,
+				targetX, targetY, targetType
+			);
 		}
 		this.gameProxy.updateMoves = (value: number): void => { this.updateMoves(value); }
 		this.gameProxy.updateScore = (value: number): void => { this.updateScore(value); }
@@ -148,7 +161,7 @@ export default class EntryPoint extends cc.Component {
 		this.blocks = new Array(this.gridSize.x * this.gridSize.y);
 		for (let y = 0; y < this.gridSize.y; y++) {
 			for (let x = 0; x < this.gridSize.x; x++) {
-				const instance = cc.instantiate(this.gridPrefab);
+				const instance = cc.instantiate(this.blockPrefab);
 				const index = this.getIndex(x, y);
 				this.blocks[index] = instance;
 			}
@@ -159,15 +172,19 @@ export default class EntryPoint extends cc.Component {
 				const index = this.getIndex(x, y);
 				let instance = this.blocks[index];
 				instance.parent = this.grid.node;
-				instance.setPosition(
-					x * this.getCellWidth() + this.grid.paddingLeft,
-					y * this.getCellHeight() + this.grid.paddingBottom
-				);
+				this.setBlockVisualPosition(instance, x, y);
 			}
 		}
 
 		this.game = new Game(this.gridSize, this.gameProxy);
 		this.game.reinitBlocks();
+	}
+
+	private setBlockVisualPosition (instance: cc.Node, x: number, y: number): void {
+		instance.setPosition(
+			x * this.getCellWidth() + this.getCellPaddingLeft(),
+			y * this.getCellHeight() + this.getCellPaddingBottom()
+		);
 	}
 
 	private updateBlock (x: number, y: number, blockType: BlockType): void {
@@ -202,36 +219,108 @@ export default class EntryPoint extends cc.Component {
 		return this.grid.cellSize.height + this.grid.spacingY;
 	}
 
-	private pushMessage(x: number, y: number, blockType: BlockType, eventType: EventType) {
+	private getCellPaddingLeft(): number {
+		return this.grid.paddingLeft + this.blockPrefab.data.width * this.blockPrefab.data.anchorX;
+	}
+
+	private getCellPaddingBottom(): number {
+		return this.grid.paddingBottom + this.blockPrefab.data.height * this.blockPrefab.data.anchorY;
+	}
+
+	private pushMessage(eventType: EventType,
+		sourceX: number, sourceY: number, sourceType: BlockType,
+		targetX: number, targetY: number, targetType: BlockType
+	) {
 		if (this.messagesSet >= this.messages.length)
 			this.messages.push(new Message());
 
 		const message = this.messages[this.messagesSet];
 		this.messagesSet += 1;
 
-		message.x         = x;
-		message.y         = y;
-		message.blockType = blockType;
 		message.eventType = eventType;
+
+		message.source.x    = sourceX;
+		message.source.y    = sourceY;
+		message.source.type = sourceType;
+
+		message.target.x    = targetX;
+		message.target.y    = targetY;
+		message.target.type = targetType;
 	}
 	
 	private processMessages(dt: number): void {
 		const prevSet = this.messagesSet;
-		this.messagesSet = 0;
 
-		for (let i = 0; i < prevSet; i++) {
-			const message = this.messages[i];
-			const emptyIndex = this.messagesSet;
-			if (this.messagesTime < message.getDuration()) {
-				this.messagesSet += 1;
-				if (emptyIndex < i) {
-					this.messages[i] = this.messages[emptyIndex]; // move processed up
-					this.messages[emptyIndex] = message;          // move pending down
-				}
+		// animate
+		let done = true;
+		this.messagesTime += dt;
+		for (let it = 0; it < this.messagesSet; it++) {
+			const message = this.messages[it];
+			const index = this.getIndex(message.target.x, message.target.y);
+			const instance = this.blocks[index];
+			const duration = message.getDuration();
+			const progress = duration > 0 ? Math.min(this.messagesTime / duration, 1) : 1;
+
+			if (progress < 1) done = false;
+
+			switch (message.eventType) {
+				case EventType.Wipe: {
+					const visualType = progress < 0.8 ? message.source.type : message.target.type;
+					this.updateBlock(message.target.x, message.target.y, visualType);
+				} break;
+
+				case EventType.Init:
+				case EventType.Fill:
+				case EventType.Move:
+				case EventType.Yank: {
+					const visualType = message.target.type;
+					this.updateBlock(message.target.x, message.target.y, visualType);
+				} break;
+			}
+
+			switch (message.eventType) {
+				case EventType.Move: {
+					const visualX = cc.lerp(message.source.x, message.target.x, progress);
+					const visualY = cc.lerp(message.source.y, message.target.y, progress);
+					this.setBlockVisualPosition(instance, visualX, visualY);
+				} break;
+			}
+
+			switch (message.eventType) {
+				case EventType.Init:
+				case EventType.Fill:
+					instance.scale = progress;
+					break;
+
+				case EventType.Yank:
+				case EventType.Wipe:
+					instance.scale = 1 - progress;
+					break;
+
+				case EventType.Move:
+					instance.scale = 1;
+					break;
 			}
 		}
 
-		this.messagesTime += dt;
+		// @note it's possible to drop messages in the middle, but we risk
+		// putting the UI into faulty state depending on duration settings
+		// remove completed
+		// this.messagesSet = 0;
+		// for (let it = 0; it < prevSet; it++) {
+		// 	const message = this.messages[it];
+		// 	const emptyIndex = this.messagesSet;
+		// 	if (this.messagesTime < message.getDuration()) {
+		// 		this.messagesSet += 1;
+		// 		if (emptyIndex < it) {
+		// 			this.messages[it] = this.messages[emptyIndex]; // move processed up
+		// 			this.messages[emptyIndex] = message;           // move pending down
+		// 		}
+		// 	}
+		// }
+
+		// finalize
+		if (done) this.messagesSet = 0;
 		if (this.messagesSet == 0)
 			this.messagesTime = 0;
 	}

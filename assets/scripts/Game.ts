@@ -48,7 +48,7 @@ export class Game {
 		if (this.proxy != null) {
 			for (let index = 0; index < this.blocks.length; index++) {
 				const blockType = this.blocks[index];
-				this.proxyUpdateBlock(index, blockType, EventType.Init);
+				this.proxyUpdateBlock(EventType.Init, index, blockType, index, blockType);
 			}
 			this.proxy.updateMoves(this.moves);
 			this.proxy.updateScore(this.score);
@@ -102,8 +102,8 @@ export class Game {
 				this.blocks[sourceIdx] = moveTrailType;
 				change = true;
 				if (this.proxy != null) {
-					this.proxyUpdateBlock(targetIdx, sourceType, EventType.Move);
-					this.proxyUpdateBlock(sourceIdx, moveTrailType, EventType.Yank);
+					this.proxyUpdateBlock(EventType.Move, sourceIdx, targetType, targetIdx, sourceType);
+					this.proxyUpdateBlock(EventType.Yank, sourceIdx, sourceType, sourceIdx, moveTrailType);
 				}
 			}
 		}
@@ -115,7 +115,7 @@ export class Game {
 				this.blocks[index] = nextBlockType;
 				change = true;
 				if (this.proxy != null)
-					this.proxyUpdateBlock(index, nextBlockType, EventType.Fill);
+					this.proxyUpdateBlock(EventType.Fill, index, blockType, index, nextBlockType);
 			}
 		}
 
@@ -146,7 +146,7 @@ export class Game {
 				this.blocks[index] = wipeTrailType;
 
 				if (this.proxy != null)
-					this.proxyUpdateBlock(index, wipeTrailType, EventType.Wipe);
+					this.proxyUpdateBlock(EventType.Wipe, index, blockType, index, wipeTrailType);
 			}
 
 			switch (blockType) {
@@ -290,9 +290,17 @@ export class Game {
 			this.skips[i] = false;
 	}
 
-	private proxyUpdateBlock(index: number, blockType: BlockType, eventType: EventType): void {
-		const x = index % this.size.x;
-		const y = Math.floor(index / this.size.x);
-		this.proxy.updateBlock(x, y, blockType, eventType);
+	private proxyUpdateBlock(eventType: EventType,
+		sourceIndex: number, sourceType: BlockType,
+		targetIndex: number, targetType: BlockType
+	): void {
+		const sourceX = sourceIndex % this.size.x;
+		const sourceY = Math.floor(sourceIndex / this.size.x);
+		const targetX = targetIndex % this.size.x;
+		const targetY = Math.floor(targetIndex / this.size.x);
+		this.proxy.updateBlock(eventType,
+			sourceX, sourceY, sourceType,
+			targetX, targetY, targetType
+		);
 	}
 }

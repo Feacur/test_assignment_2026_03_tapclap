@@ -10,7 +10,11 @@ export enum EventType {
 };
 
 interface BlockDelegate {
-	(x: number, y: number, blockType: BlockType, eventType: EventType): void;
+	(
+		eventType: EventType,
+		sourceX: number, sourceY: number, sourceType: BlockType,
+		targetX: number, targetY: number, targetType: BlockType
+	): void;
 }
 
 interface NumberDelegate {
