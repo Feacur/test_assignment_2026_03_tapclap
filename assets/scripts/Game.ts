@@ -23,6 +23,7 @@ export class Game {
 	private score: number = 0;
 
 	private queue: number[] = []
+	private queueIndex: number = 0;
 
 	constructor(size: cc.Vec2, proxy: GameProxy) {
 		this.size.x = size.x;
@@ -86,6 +87,7 @@ export class Game {
 
 	private doStateNone(): void {
 		this.queue.length = 0;
+		this.queueIndex = 0;
 		this.state = GameState.Fill;
 	}
 
@@ -146,8 +148,12 @@ export class Game {
 	}
 
 	private doStateProcess(): void {
-		for (let it = 0; it < this.queue.length; it++) {
-			const index = this.queue[it];
+		// @optimize processing can be time sliced as an option
+		// but only would be sensible for insane synergized combinations
+		const timeSliceSize = this.size.x * this.size.y;
+		const nextTimeSliceIndex = Math.min(this.queueIndex + timeSliceSize, this.queue.length);
+		for (/*empty*/; this.queueIndex < nextTimeSliceIndex; this.queueIndex++) {
+			const index = this.queue[this.queueIndex];
 			const blockType = this.blocks[index];
 
 			if (BlockTypeUtils.isDestructible(blockType)) {
@@ -168,7 +174,8 @@ export class Game {
 			}
 		}
 
-		this.state = GameState.Anim;
+		if (this.queueIndex >= this.queue.length)
+			this.state = GameState.Anim;
 	}
 
 	private doStateAnim(): void {
