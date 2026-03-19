@@ -11,6 +11,20 @@ import { EventType, GameProxy } from "./GameProxy";
 
 const {ccclass, property} = cc._decorator;
 
+class Message {
+	x: number;
+	y: number;
+	blockType: BlockType;
+	eventType: EventType;
+
+	getDuration(): number {
+		switch (this.eventType) {
+			case EventType.Init: return 0;
+		}
+		return 0.2;
+	}
+}
+
 @ccclass
 export default class EntryPoint extends cc.Component {
 
@@ -48,6 +62,10 @@ export default class EntryPoint extends cc.Component {
 	private blocks: cc.Node[] = null;
 	private game: Game = null;
 
+	private messages: Message[] = []
+	private messagesSet: number = 0; // @note reuse message instances
+	private messagesTime: number = 0;
+
 	// LIFE-CYCLE:
 
 	onLoad(): void {
@@ -79,12 +97,11 @@ export default class EntryPoint extends cc.Component {
 		this.gameProxy = new GameProxy();
 		this.gameProxy.updateBlock = (x: number, y: number, blockType: BlockType, eventType: EventType) => {
 			this.updateBlock(x, y, blockType);
+			this.pushMessage(x, y, blockType, eventType);
 		}
 		this.gameProxy.updateMoves = (value: number): void => { this.updateMoves(value); }
 		this.gameProxy.updateScore = (value: number): void => { this.updateScore(value); }
-		this.gameProxy.waitForAnim = (): boolean => {
-			return false;
-		}
+		this.gameProxy.waitForAnim = (): boolean => { return this.messagesSet > 0; }
 	}
 
 	start(): void {
@@ -95,6 +112,7 @@ export default class EntryPoint extends cc.Component {
 
 	update(dt: number): void {
 		this.game.tick(dt);
+		this.processMessages(dt);
 	}
 
 	// INPUT:
@@ -182,5 +200,39 @@ export default class EntryPoint extends cc.Component {
 
 	private getCellHeight(): number {
 		return this.grid.cellSize.height + this.grid.spacingY;
+	}
+
+	private pushMessage(x: number, y: number, blockType: BlockType, eventType: EventType) {
+		if (this.messagesSet >= this.messages.length)
+			this.messages.push(new Message());
+
+		const message = this.messages[this.messagesSet];
+		this.messagesSet += 1;
+
+		message.x         = x;
+		message.y         = y;
+		message.blockType = blockType;
+		message.eventType = eventType;
+	}
+	
+	private processMessages(dt: number): void {
+		const prevSet = this.messagesSet;
+		this.messagesSet = 0;
+
+		for (let i = 0; i < prevSet; i++) {
+			const message = this.messages[i];
+			const emptyIndex = this.messagesSet;
+			if (this.messagesTime < message.getDuration()) {
+				this.messagesSet += 1;
+				if (emptyIndex < i) {
+					this.messages[i] = this.messages[emptyIndex]; // move processed up
+					this.messages[emptyIndex] = message;          // move pending down
+				}
+			}
+		}
+
+		this.messagesTime += dt;
+		if (this.messagesSet == 0)
+			this.messagesTime = 0;
 	}
 }

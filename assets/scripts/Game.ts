@@ -3,8 +3,7 @@ import { EventType, GameProxy } from "./GameProxy";
 
 enum GameState {
 	None = 0,
-	Spawn,
-	Move,
+	Fill,
 	Input,
 	Process,
 	Anim,
@@ -62,7 +61,7 @@ export class Game {
 		if (x >= 0 && x < this.size.x && y >= 0 && y < this.size.y) {
 			const index = this.getIndex(x, y);
 			const blockType = this.blocks[index];
-			if (blockType != BlockType.None)
+			if (BlockTypeUtils.isTouchanble(blockType))
 				this.queue.push(index);
 		}
 	}
@@ -72,8 +71,7 @@ export class Game {
 			const previousState = this.state;
 			switch (previousState) {
 				case GameState.None:    this.doStateNone();    break;
-				case GameState.Spawn:   this.doStateSpawn();   break;
-				case GameState.Move:    this.doStateMove();    break;
+				case GameState.Fill:    this.doStateFill();    break;
 				case GameState.Input:   this.doStateInput();   break;
 				case GameState.Process: this.doStateProcess(); break;
 				case GameState.Anim:    this.doStateAnim();    break;
@@ -88,48 +86,40 @@ export class Game {
 
 	private doStateNone(): void {
 		this.queue.length = 0;
-		this.state = GameState.Spawn;
+		this.state = GameState.Fill;
 	}
 
-	private doStateSpawn(): void {
-		let spawned = false;
-
-		for (let index = this.blocks.length - this.size.x; index < this.blocks.length; index++) {
-			const blockType = this.blocks[index];
-			if (blockType == BlockType.None) {
-				const nextBlockType = BlockTypeGenerator.generate();
-				this.blocks[index] = nextBlockType;
-				if (this.proxy != null)
-					this.proxyUpdateBlock(index, nextBlockType, EventType.Spawn);
-				spawned = true;
-			}
-		}
-
-		this.state = spawned
-			? GameState.Anim
-			: GameState.Move;
-	}
-
-	private doStateMove(): void {
-		let moved = false;
+	private doStateFill(): void {
+		let change = false;
 
 		for (let sourceIdx = this.size.x; sourceIdx < this.blocks.length; sourceIdx++) {
 			const targetIdx = sourceIdx  - this.size.x;
 			const targetType = this.blocks[targetIdx];
 			const sourceType = this.blocks[sourceIdx];
-			if (BlockTypeUtils.isMovable(sourceType) && BlockTypeUtils.isReplaceable(targetType)) {
-				const emptyType = BlockTypeUtils.getEmpty(sourceType);
+			if (BlockTypeUtils.canBeMoveSource(sourceType) && BlockTypeUtils.canBeMoveTarget(targetType)) {
+				const moveTrailType = BlockTypeUtils.getMoveTrailType(sourceType);
 				this.blocks[targetIdx] = sourceType;
-				this.blocks[sourceIdx] = emptyType;
+				this.blocks[sourceIdx] = moveTrailType;
+				change = true;
 				if (this.proxy != null) {
-					this.proxyUpdateBlock(targetIdx, sourceType, EventType.Fill);
-					this.proxyUpdateBlock(sourceIdx, emptyType, EventType.Move);
+					this.proxyUpdateBlock(targetIdx, sourceType, EventType.Move);
+					this.proxyUpdateBlock(sourceIdx, moveTrailType, EventType.Yank);
 				}
-				moved = true;
 			}
 		}
 
-		this.state = moved
+		for (let index = this.blocks.length - this.size.x; index < this.blocks.length; index++) {
+			const blockType = this.blocks[index];
+			if (BlockTypeUtils.isFillable(blockType)) {
+				const nextBlockType = BlockTypeGenerator.generate();
+				this.blocks[index] = nextBlockType;
+				change = true;
+				if (this.proxy != null)
+					this.proxyUpdateBlock(index, nextBlockType, EventType.Fill);
+			}
+		}
+
+		this.state = change
 			? GameState.Anim
 			: GameState.Input;
 	}
@@ -150,13 +140,13 @@ export class Game {
 			const blockType = this.blocks[index];
 
 			if (BlockTypeUtils.isDestructible(blockType)) {
-				const nextBlockType = BlockType.None;
+				const wipeTrailType = BlockTypeUtils.getWipeTrailType(blockType);
 
 				this.score += BlockTypeValue.get(blockType);
-				this.blocks[index] = nextBlockType;
+				this.blocks[index] = wipeTrailType;
 
 				if (this.proxy != null)
-					this.proxyUpdateBlock(index, nextBlockType, EventType.Wipe);
+					this.proxyUpdateBlock(index, wipeTrailType, EventType.Wipe);
 			}
 
 			switch (blockType) {
@@ -209,7 +199,7 @@ export class Game {
 		if (this.skips[index]) return;
 
 		const blockType = this.blocks[index];
-		if (BlockTypeUtils.match(blockType, matchBlockType)) {
+		if (BlockTypeUtils.matchFloodFill(blockType, matchBlockType)) {
 			this.skips[index] = true;
 			this.queue.push(index);
 		}

@@ -68,6 +68,18 @@ export abstract class BlockTypeValue {
 BlockTypeValue._initialize();
 
 export abstract class BlockTypeUtils {
+	static isTouchanble(blockType: BlockType): boolean {
+		switch (blockType) {
+			case BlockType.None:
+				return false;
+		}
+		return true;
+	}
+
+	static matchFloodFill(aType: BlockType, bType: BlockType): boolean {
+		return aType == bType;
+	}
+
 	static isFloodFillable(blockType: BlockType): boolean {
 		switch (blockType) {
 			case BlockType.Blue:
@@ -79,9 +91,6 @@ export abstract class BlockTypeUtils {
 		}
 		return false;
 	}
-	static match(aType: BlockType, bType: BlockType): boolean {
-		return aType == bType;
-	}
 
 	static isDestructible(blockType: BlockType): boolean {
 		switch (blockType) {
@@ -91,7 +100,7 @@ export abstract class BlockTypeUtils {
 		return true;
 	}
 
-	static isMovable(blockType: BlockType): boolean {
+	static canBeMoveSource(blockType: BlockType): boolean {
 		switch (blockType) {
 			case BlockType.None:
 				return false;
@@ -99,7 +108,7 @@ export abstract class BlockTypeUtils {
 		return true;
 	}
 
-	static isReplaceable(blockType: BlockType): boolean {
+	static canBeMoveTarget(blockType: BlockType): boolean {
 		switch (blockType) {
 			case BlockType.None:
 				return true;
@@ -107,11 +116,24 @@ export abstract class BlockTypeUtils {
 		return false;
 	}
 
-	static getEmpty(sourceBlockType: BlockType): BlockType {
+	static isFillable(blockType: BlockType): boolean {
+		switch (blockType) {
+			case BlockType.None:
+				return true;
+		}
+		return false;
+	}
+
+	static getMoveTrailType(sourceBlockType: BlockType): BlockType {
+		return BlockType.None;
+	}
+
+	static getWipeTrailType(sourceBlockType: BlockType): BlockType {
 		return BlockType.None;
 	}
 
 	static getWipeRadius(blockType: BlockType): number {
+		// @note harcode to bombs, but with small moifications it's possible to make wide rocket lines
 		switch (blockType) {
 			case BlockType.BombTiny: return 1;
 			case BlockType.BombHuge: return 2;
