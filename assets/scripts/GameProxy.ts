@@ -1,4 +1,4 @@
-import { BlockType } from "./BlockType";
+import { BlockType } from "./Block";
 
 export enum EventType {
 	None = 0,

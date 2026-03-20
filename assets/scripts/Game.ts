@@ -1,4 +1,4 @@
-import { BlockType, BlockTypeGenerator, BlockTypeUtils, BlockTypeValue } from "./BlockType"
+import { BlockType, BlockTypeGenerator, BlockTypeUtils, BlockTypeValue } from "./Block"
 import { EventType, GameProxy } from "./GameProxy";
 
 enum GameState {

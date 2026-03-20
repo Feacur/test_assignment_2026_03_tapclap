@@ -5,7 +5,7 @@
 // Learn life-cycle s:
 //  - https://docs.cocos.com/creator/2.4/manual/en/scripting/life-cycle-s.html
 
-import { BlockType } from "./BlockType";
+import { BlockType } from "./Block";
 import { Game } from "./Game";
 import { EventType, GameProxy } from "./GameProxy";
 
