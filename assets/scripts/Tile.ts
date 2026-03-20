@@ -76,7 +76,7 @@ export abstract class TileUtils {
 		return true;
 	}
 
-	static getMinTilesCountForDmge(type: TileType): number {
+	static getMinAreaToDamage(type: TileType): number {
 		switch (type) {
 			case TileType.Blue:
 			case TileType.Green:

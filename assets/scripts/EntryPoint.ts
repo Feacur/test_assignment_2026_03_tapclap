@@ -25,6 +25,7 @@ class Message {
 
 	getDuration(): number {
 		switch (this.eventType) {
+			case EventType.Shuffle: return 2;
 			case EventType.Error:   return 0.1;
 			case EventType.Damage:  return 0.4;
 			// @note Spawn, Trail, Moved are better being in sync
@@ -76,6 +77,9 @@ export default class EntryPoint extends cc.Component {
 
 	@property(cc.Vec2)
 	gridSize: cc.Vec2 = new cc.Vec2(5, 5);
+
+	@property(Number)
+	shufflesLimit: number = 3;
 
 	private gameProxy: GameProxy = null;
 	private tiles: cc.Node[] = null;
@@ -171,25 +175,14 @@ export default class EntryPoint extends cc.Component {
 	private initializeGame (): void {
 		// @todo reuse tiles on reinit or at least despawn them
 		this.tiles = new Array(this.gridSize.x * this.gridSize.y);
-		for (let y = 0; y < this.gridSize.y; y++) {
-			for (let x = 0; x < this.gridSize.x; x++) {
-				const instance = cc.instantiate(this.tilePrefab);
-				const index = this.getIndex(x, y);
-				this.tiles[index] = instance;
-			}
+		for (let index = 0; index < this.tiles.length; index++) {
+			const instance = cc.instantiate(this.tilePrefab);
+			instance.parent = this.grid.node;
+			this.tiles[index] = instance;
 		}
 
-		for (let y = 0; y < this.gridSize.y; y++) {
-			for (let x = 0; x < this.gridSize.x; x++) {
-				const index = this.getIndex(x, y);
-				let instance = this.tiles[index];
-				instance.parent = this.grid.node;
-				this.setTileVisualPosition(instance, x, y);
-			}
-		}
-
-		this.game = new Game(this.gridSize, this.gameProxy);
-		this.game.reinitTiles();
+		this.game = new Game(this.gridSize, this.shufflesLimit, this.gameProxy);
+		this.game.initialize();
 	}
 
 	private setTileVisualPosition (instance: cc.Node, x: number, y: number): void {
@@ -219,8 +212,7 @@ export default class EntryPoint extends cc.Component {
 	// HELPERS:
 
 	private getIndex(x: number, y: number) {
-		const ret = y * this.gridSize.x + x;
-		return ret;
+		return y * this.gridSize.x + x;
 	}
 
 	private getCellWidth(): number {
@@ -292,9 +284,19 @@ export default class EntryPoint extends cc.Component {
 					instance.rotation = amplitude * Math.sin(frequency * progress);
 				} break;
 
-				case EventType.Init: {
+				case EventType.Initialize: {
 					instance.scale = 1;
 					const visualType = message.target.type;
+					this.updateTile(message.target.x, message.target.y, visualType);
+					this.setTileVisualPosition(instance, message.target.x, message.target.y);
+				} break;
+
+				case EventType.Shuffle: {
+					const pivotMoment = 0.5;
+					instance.scale = progress < pivotMoment
+						? 1 - cc.easing.backIn(progress / pivotMoment)
+						: cc.easing.elasticOut((progress - pivotMoment) / pivotMoment);
+					const visualType = progress < pivotMoment ? message.source.type : message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 

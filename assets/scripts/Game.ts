@@ -7,10 +7,12 @@ enum GameState {
 	InputQueue,
 	ProcessQueue,
 	Animate,
+	GameOver,
 }
 
 export class Game {
 	private size: cc.Vec2 = new cc.Vec2(0, 0);
+	private generationsLimit: number = 0;
 	private proxy: GameProxy = null;
 
 	private state: GameState = GameState.None;
@@ -18,16 +20,17 @@ export class Game {
 	private tiles: TileType[] = null
 	private skips: boolean[] = null
 
-	private inits: number = 0;
+	private generation: number = 0;
 	private moves: number = 0;
 	private score: number = 0;
 
 	private queue: number[] = []
 	private queueIndex: number = 0;
 
-	constructor(size: cc.Vec2, proxy: GameProxy) {
+	constructor(size: cc.Vec2, shufflesLimit: number, proxy: GameProxy) {
 		this.size.x = size.x;
 		this.size.y = size.y;
+		this.generationsLimit = shufflesLimit;
 		this.proxy = proxy;
 
 		this.tiles = new Array(size.x * size.y);
@@ -36,21 +39,10 @@ export class Game {
 
 	// API:
 
-	reinitTiles(): void {
-		this.inits += 1;
-		for (let y = 0; y < this.size.y; y++) {
-			for (let x = 0; x < this.size.x; x++) {
-				const index = this.getIndex(x, y);
-				const type = TileGenerator.generate();
-				this.tiles[index] = type;
-			}
-		}
-
+	initialize(): void {
+		this.state = GameState.None;
+		this.regenerateTiles();
 		if (this.proxy != null) {
-			for (let index = 0; index < this.tiles.length; index++) {
-				const type = this.tiles[index];
-				this.proxyUpdateTile(EventType.Init, index, type, index, type);
-			}
 			this.proxy.updateMoves(this.moves);
 			this.proxy.updateScore(this.score);
 		}
@@ -77,6 +69,7 @@ export class Game {
 				case GameState.InputQueue:   this.doStateInputQueue();   break;
 				case GameState.ProcessQueue: this.doStateProcessQueue(); break;
 				case GameState.Animate:      this.doStateAnimate();      break;
+				case GameState.GameOver:     /*idle*/                    break;
 			}
 			// @note waiting for input or animating, but processing
 			// can be spread thin over a few frames too as an optimization
@@ -89,7 +82,16 @@ export class Game {
 	private doStateNone(): void {
 		this.queue.length = 0;
 		this.queueIndex = 0;
-		this.state = GameState.ProcessBoard;
+
+		const preprocessResult = this.preprocessBoard();
+		if (!preprocessResult) {
+			if (this.generation <= this.generationsLimit) {
+				this.regenerateTiles();
+				this.state = GameState.Animate;
+			}
+			else this.state = GameState.GameOver;
+		}
+		else this.state = GameState.ProcessBoard
 	}
 
 	private doStateProcessBoard(): void { // @note can be time sliced
@@ -131,8 +133,8 @@ export class Game {
 		if (this.queue.length == 0)
 			return; // @note idle
 
-		this.preprocessInputQueue();
-		if (this.verifyInputQueue()) {
+		const preprocessResult = this.preprocessInputQueue();
+		if (preprocessResult) {
 			this.moves += 1;
 			if (this.proxy != null)
 				this.proxy.updateMoves(this.moves);
@@ -212,30 +214,56 @@ export class Game {
 
 	// PROCESSING:
 
-	private preprocessInputQueue(): void {
-		let index = this.queue[0];
+	private floodFillIntoQueue(index: number): number {
+		if (this.skips[index]) return 0;
+		this.skips[index] = true;
+
 		const type = this.tiles[index];
-		
-		if (TileUtils.isFloodFillable(type)) {
-			this.skips[index] = true;
-			for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
-				this.queueSafeOffsetMatching(this.getOffsetIndex(index, -1,  0), type);
-				this.queueSafeOffsetMatching(this.getOffsetIndex(index,  1,  0), type);
-				this.queueSafeOffsetMatching(this.getOffsetIndex(index,  0, -1), type);
-				this.queueSafeOffsetMatching(this.getOffsetIndex(index,  0,  1), type);
-	
-				if (nextIt >= this.queue.length) break;
-				index = this.queue[nextIt];
-			}
-			this.resetSkips();
+		if (!TileUtils.isFloodFillable(type))
+			return 1; // only the tile itself
+
+		const prevLength = this.queue.length;
+		for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
+			this.queueSafeOffsetMatching(this.getOffsetIndex(index, -1,  0), type);
+			this.queueSafeOffsetMatching(this.getOffsetIndex(index,  1,  0), type);
+			this.queueSafeOffsetMatching(this.getOffsetIndex(index,  0, -1), type);
+			this.queueSafeOffsetMatching(this.getOffsetIndex(index,  0,  1), type);
+
+			if (nextIt >= this.queue.length) break;
+			index = this.queue[nextIt];
 		}
+
+		// @note including this tile
+		return 1 + this.queue.length - prevLength;
 	}
 
-	private verifyInputQueue(): boolean {
-		let index = this.queue[0];
+	private preprocessBoard(): boolean {
+		let foundMinArea = false;
+		for (let index = 0; index < this.tiles.length; index++) {
+			this.queue.push(index);
+			const area = this.floodFillIntoQueue(index);
+			this.queue.length = 0;
+
+			const type = this.tiles[index];
+			const minArea = TileUtils.getMinAreaToDamage(type);
+			if (area >= minArea) {
+				foundMinArea = true;
+				break;
+			}
+		}
+		this.resetSkips();
+		if (foundMinArea) return true;
+
+		return false;
+	}
+
+	private preprocessInputQueue(): boolean {
+		const index = this.queue[0];
+		const area = this.floodFillIntoQueue(index);
 		const type = this.tiles[index];
-		const minTilesCountForDmge = TileUtils.getMinTilesCountForDmge(type);
-		return this.queue.length >= minTilesCountForDmge;
+		const minArea = TileUtils.getMinAreaToDamage(type);
+		this.resetSkips();
+		return area >= minArea;
 	}
 
 	private doProcessArea(center: number, radius: number): void {
@@ -299,9 +327,27 @@ export class Game {
 
 	// HELPERS:
 
+	regenerateTiles(): void {
+		const eventType = this.generation == 0
+			? EventType.Initialize
+			: EventType.Shuffle;
+
+		this.generation += 1;
+		for (let index = 0; index < this.tiles.length; index++) {
+			const type = TileGenerator.generate();
+			this.tiles[index] = type;
+		}
+
+		if (this.proxy != null) {
+			for (let index = 0; index < this.tiles.length; index++) {
+				const type = this.tiles[index];
+				this.proxyUpdateTile(eventType, index, type, index, type);
+			}
+		}
+	}
+
 	private getIndex(x: number, y: number): number {
-		const ret = y * this.size.x + x;
-		return ret;
+		return y * this.size.x + x;
 	}
 
 	private getOffsetIndex(center: number, xOffset: number, yOffset: number): number {
@@ -313,8 +359,7 @@ export class Game {
 		if (y <  0)           return -1;
 		if (y >= this.size.y) return -1;
 
-		const ret = this.getIndex(x, y);
-		return ret;
+		return this.getIndex(x, y);
 	}
 
 	private resetSkips(): void {

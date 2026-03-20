@@ -2,12 +2,13 @@ import { TileType } from "./Tile";
 
 export enum EventType {
 	None = 0,
-	Error,   // input issue
-	Init,    // start of the game
-	Damage,  // damaged by touch or chain reactions
-	Spawn,   // created during gameplay
-	Trail,   // left behind after a move
-	Moved,   // tile changed position
+	Error,      // input issue
+	Initialize, // start of the game
+	Shuffle,    // triggered by game itself
+	Damage,     // damaged by touch or chain reactions
+	Spawn,      // created during gameplay
+	Trail,      // left behind after a move
+	Moved,      // tile changed position
 };
 
 interface TileDelegate {
