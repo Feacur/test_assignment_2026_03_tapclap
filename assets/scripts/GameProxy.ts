@@ -27,8 +27,8 @@ interface TileDelegate {
 	): void;
 }
 
-interface NumberDelegate {
-	(value: number): void;
+interface RangeDelegate {
+	(value1: number, value2: number): void;
 }
 
 interface StateDelegate {
@@ -45,8 +45,8 @@ interface GetBoolDelegate {
 
 export class GameProxy {
 	updateTile:  TileDelegate    = null;
-	updateMoves: NumberDelegate  = null;
-	updateScore: NumberDelegate  = null;
+	updateMoves: RangeDelegate   = null;
+	updateScore: RangeDelegate   = null;
 	updateState: StateDelegate   = null;
 	updateBoost: BoostDelegate   = null;
 	waitForAnim: GetBoolDelegate = null;

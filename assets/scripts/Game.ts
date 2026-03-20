@@ -20,15 +20,16 @@ export enum BoostType {
 }
 
 export class GameSettings {
-	size: cc.Vec2 = new cc.Vec2(0, 0);
+	width: number = 0;
+	height: number = 0;
 	regenLimit: number = 0;
 	movesLimit: number = 0;
 	scoreLimit: number = 0;
 	boostLimit: number[] = new Array(BoostType.__COUNT__);
 
 	set(other: GameSettings): void {
-		this.size.x = other.size.x;
-		this.size.y = other.size.y;
+		this.width = other.width;
+		this.height = other.height;
 		this.regenLimit = other.regenLimit;
 		this.movesLimit = other.movesLimit;
 		this.scoreLimit = other.scoreLimit;
@@ -66,7 +67,7 @@ export class Game {
 	initialize(settings: GameSettings): void {
 		this.settings.set(settings);
 
-		const boardTilesCount = settings.size.x * settings.size.y;
+		const boardTilesCount = settings.width * settings.height;
 		if (this.tiles.length != boardTilesCount)
 			this.tiles.length = boardTilesCount;
 		if (this.skips.length != boardTilesCount)
@@ -80,8 +81,8 @@ export class Game {
 
 		this.regenerateTiles();
 		if (this.proxy != null) {
-			this.proxy.updateMoves(this.moves);
-			this.proxy.updateScore(this.score);
+			this.proxy.updateMoves(this.moves, this.settings.movesLimit);
+			this.proxy.updateScore(this.score, this.settings.scoreLimit);
 			this.proxy.updateState(StateEvent.None);
 			for (let type = 0; type < this.boost.length; type++) {
 				const available = this.getAvailableBoosts(type);
@@ -101,7 +102,7 @@ export class Game {
 	}
 
 	inputTouchTile(x: number, y: number): boolean {
-		if (x < 0 || x >= this.settings.size.x || y < 0 || y >= this.settings.size.y)
+		if (x < 0 || x >= this.settings.width || y < 0 || y >= this.settings.height)
 			return false; // OOB
 
 		const index = this.getIndex(x, y);
@@ -122,9 +123,9 @@ export class Game {
 		sourceX: number, sourceY: number,
 		targetX: number, targetY: number
 	): boolean {
-		if (sourceX < 0 || sourceX >= this.settings.size.x || sourceY < 0 || sourceY >= this.settings.size.y)
+		if (sourceX < 0 || sourceX >= this.settings.width || sourceY < 0 || sourceY >= this.settings.height)
 			return false; // OOB
-		if (targetX < 0 || targetX >= this.settings.size.x || targetY < 0 || targetY >= this.settings.size.y)
+		if (targetX < 0 || targetX >= this.settings.width || targetY < 0 || targetY >= this.settings.height)
 			return false; // OOB
 
 		const available = this.getAvailableBoosts(type);
@@ -239,8 +240,8 @@ export class Game {
 	private doStateProcessBoard(): void { // @note can be time sliced
 		let change = false;
 
-		for (let sourceIdx = this.settings.size.x; sourceIdx < this.tiles.length; sourceIdx++) {
-			const targetIdx = sourceIdx  - this.settings.size.x;
+		for (let sourceIdx = this.settings.width; sourceIdx < this.tiles.length; sourceIdx++) {
+			const targetIdx = sourceIdx  - this.settings.width;
 			const targetType = this.tiles[targetIdx];
 			const sourceType = this.tiles[sourceIdx];
 			if (TileUtils.canBeMoveSource(sourceType) && TileUtils.canBeMoveTarget(targetType)) {
@@ -253,7 +254,7 @@ export class Game {
 			}
 		}
 
-		for (let index = this.tiles.length - this.settings.size.x; index < this.tiles.length; index++) {
+		for (let index = this.tiles.length - this.settings.width; index < this.tiles.length; index++) {
 			const type = this.tiles[index];
 			if (TileUtils.isFillable(type)) {
 				const spawnType = TileGenerator.generate();
@@ -276,7 +277,7 @@ export class Game {
 		if (preprocessResult) {
 			this.moves += 1;
 			if (this.proxy != null)
-				this.proxy.updateMoves(this.moves);
+				this.proxy.updateMoves(this.moves, this.settings.movesLimit);
 			this.state = GameState.ProcessQueue;
 		}
 		else {
@@ -288,7 +289,7 @@ export class Game {
 		// @note processing can be time sliced as an optimization option
 		// but only would be sensible for insane synergized combinations
 		// say, if something generates new tiles and builds up the queue
-		const timeSliceSize = this.settings.size.x * this.settings.size.y * 10;
+		const timeSliceSize = this.settings.width * this.settings.height * 10;
 		const nextTimeSliceIndex = Math.min(this.queueIndex + timeSliceSize, this.queue.length);
 		for (/*empty*/; this.queueIndex < nextTimeSliceIndex; this.queueIndex++) {
 			const index = this.queue[this.queueIndex];
@@ -317,7 +318,7 @@ export class Game {
 	private doStateAnimate(): void {
 		if (this.proxy != null) { // @note idle
 			if (this.proxy.waitForAnim()) return;
-			this.proxy.updateScore(this.score);
+			this.proxy.updateScore(this.score, this.settings.scoreLimit);
 		}
 		this.state = GameState.None;
 	}
@@ -372,14 +373,14 @@ export class Game {
 	}
 
 	private enqueueArea(center: number, radius: number): void {
-		const xCenter = (center % this.settings.size.x);
-		const yCenter = Math.floor(center / this.settings.size.x);
+		const xCenter = (center % this.settings.width);
+		const yCenter = Math.floor(center / this.settings.width);
 
 		let index = center;
 		this.skips[index] = true;
 		for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
-			const x = (index % this.settings.size.x);
-			const y = Math.floor(index / this.settings.size.x);
+			const x = (index % this.settings.width);
+			const y = Math.floor(index / this.settings.width);
 			if (Math.abs(x - xCenter) < radius && Math.abs(y - yCenter) < radius) {
 				this.enqueueTileAny(this.getOffsetIndex(index, -1,  0));
 				this.enqueueTileAny(this.getOffsetIndex(index,  1,  0));
@@ -462,17 +463,17 @@ export class Game {
 	// HELPERS:
 
 	private getIndex(x: number, y: number): number {
-		return y * this.settings.size.x + x;
+		return y * this.settings.width + x;
 	}
 
 	private getOffsetIndex(center: number, xOffset: number, yOffset: number): number {
-		const x = (center % this.settings.size.x)           + xOffset;
-		const y = Math.floor(center / this.settings.size.x) + yOffset;
+		const x = (center % this.settings.width)           + xOffset;
+		const y = Math.floor(center / this.settings.width) + yOffset;
 
 		if (x <  0)           return -1;
-		if (x >= this.settings.size.x) return -1;
+		if (x >= this.settings.width) return -1;
 		if (y <  0)           return -1;
-		if (y >= this.settings.size.y) return -1;
+		if (y >= this.settings.height) return -1;
 
 		return this.getIndex(x, y);
 	}
@@ -488,10 +489,10 @@ export class Game {
 		targetIndex: number, targetType: TileType
 	): void {
 		if (this.proxy == null) return;
-		const sourceX = sourceIndex % this.settings.size.x;
-		const sourceY = Math.floor(sourceIndex / this.settings.size.x);
-		const targetX = targetIndex % this.settings.size.x;
-		const targetY = Math.floor(targetIndex / this.settings.size.x);
+		const sourceX = sourceIndex % this.settings.width;
+		const sourceY = Math.floor(sourceIndex / this.settings.width);
+		const targetX = targetIndex % this.settings.width;
+		const targetY = Math.floor(targetIndex / this.settings.width);
 		this.proxy.updateTile(eventType,
 			sourceX, sourceY, sourceType,
 			targetX, targetY, targetType

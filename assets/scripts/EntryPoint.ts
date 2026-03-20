@@ -133,20 +133,20 @@ export default class EntryPoint extends cc.Component {
 				targetX, targetY, targetType
 			);
 		}
-		this.gameProxy.updateMoves = (value: number): void => { this.updateMoves(value); }
-		this.gameProxy.updateScore = (value: number): void => { this.updateScore(value); }
+		this.gameProxy.updateMoves = (current: number, limit: number): void => { this.updateMoves(current, limit); }
+		this.gameProxy.updateScore = (current: number, limit: number): void => { this.updateScore(current, limit); }
 		this.gameProxy.updateState = (value: StateEvent): void => { this.updateState(value); }
 		this.gameProxy.updateBoost = (type: BoostType, quantity: number): void => { this.updateBoost(type, quantity); }
 		this.gameProxy.waitForAnim = (): boolean => { return this.isAnimationBlocking(); }
 
 		// setup settings
-		this.settings.size.x = 9;
-		this.settings.size.y = 9;
-		this.settings.regenLimit = 3;
-		this.settings.movesLimit = 30;
-		this.settings.scoreLimit = 300;
-		this.settings.boostLimit[BoostType.Tele] = 10;
-		this.settings.boostLimit[BoostType.Bomb] = 10;
+		this.settings.width      = Math.round(  3 +   6 * Math.random());
+		this.settings.height     = Math.round(  3 +   6 * Math.random());
+		this.settings.regenLimit = Math.round(  3 +   2 * Math.random());
+		this.settings.movesLimit = Math.round( 40 +  20 * Math.random());
+		this.settings.scoreLimit = Math.round(300 + 100 * Math.random());
+		this.settings.boostLimit[BoostType.Tele] = Math.round(4 + 4 * Math.random());
+		this.settings.boostLimit[BoostType.Bomb] = Math.round(2 + 2 * Math.random());
 	}
 
 	start(): void {
@@ -173,7 +173,7 @@ export default class EntryPoint extends cc.Component {
 		const x = Math.floor((pos.x - baseX) / this.getCellWidth());
 		const y = Math.floor((pos.y - baseY) / this.getCellHeight());
 
-		if (x < 0 || x >= this.settings.size.x || y < 0 || y >= this.settings.size.y)
+		if (x < 0 || x >= this.settings.width || y < 0 || y >= this.settings.height)
 			return; // OOB
 
 		this.pushMessageTouch(x, y);
@@ -226,10 +226,10 @@ export default class EntryPoint extends cc.Component {
 	// LOGIC:
 
 	private initializeGame (): void {
-		this.grid.node.width = this.settings.size.x * this.getCellWidth() + (this.grid.paddingLeft + this.grid.paddingRight);
-		this.grid.node.height = this.settings.size.y * this.getCellHeight() + (this.grid.paddingBottom + this.grid.paddingTop);
+		this.grid.node.width = this.settings.width * this.getCellWidth() + (this.grid.paddingLeft + this.grid.paddingRight);
+		this.grid.node.height = this.settings.height * this.getCellHeight() + (this.grid.paddingBottom + this.grid.paddingTop);
 
-		const boardTilesCount = this.settings.size.x * this.settings.size.y;
+		const boardTilesCount = this.settings.width * this.settings.height;
 		if (this.tiles.length < boardTilesCount) {
 			const currentTilesCount = this.tiles.length;
 			this.tiles.length = boardTilesCount;
@@ -251,19 +251,19 @@ export default class EntryPoint extends cc.Component {
 	}
 
 	private updateTile (x: number, y: number, type: TileType): void {
-		if (x >= 0 && x < this.settings.size.x && y >= 0 && y < this.settings.size.y) {
+		if (x >= 0 && x < this.settings.width && y >= 0 && y < this.settings.height) {
 			const index = this.getIndex(x, y);
 			const instance = this.tiles[index];
 			instance.spriteFrame = this.tileSpriteFrames[type];
 		}
 	}
 
-	private updateMoves(moves: number): void {
-		this.moves.string = moves.toString();
+	private updateMoves(current: number, limit: number): void {
+		this.moves.string = (limit - current).toString();
 	}
 
-	private updateScore(score: number): void {
-		this.score.string = score.toString();
+	private updateScore(current: number, limit: number): void {
+		this.score.string = current + " / " + limit;
 	}
 
 	private updateState(state: StateEvent): void {
@@ -409,7 +409,7 @@ export default class EntryPoint extends cc.Component {
 	// HELPERS:
 
 	private getIndex(x: number, y: number) {
-		return y * this.settings.size.x + x;
+		return y * this.settings.width + x;
 	}
 
 	private getCellWidth(): number {

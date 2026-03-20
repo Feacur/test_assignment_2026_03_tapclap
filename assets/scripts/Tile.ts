@@ -34,6 +34,7 @@ export abstract class TileGenerator {
 	}
 
 	public static generate(): TileType {
+		// @todo use seed
 		let rnd = Math.round(Math.random() * TileGenerator.weightsSum);
 		for (let type = 0; type < TileGenerator.weights.length; type++) {
 			rnd -= TileGenerator.weights[type];
