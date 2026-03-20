@@ -111,6 +111,14 @@ export abstract class TileUtils {
 		return true;
 	}
 
+	static canBeTeleported(type: TileType): boolean {
+		switch (type) {
+			case TileType.None:
+				return false;
+		}
+		return true;
+	}
+
 	static canBeMoveSource(type: TileType): boolean {
 		switch (type) {
 			case TileType.None:

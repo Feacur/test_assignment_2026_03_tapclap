@@ -1,21 +1,22 @@
+import { BoostType } from "./Game";
 import { TileType } from "./Tile";
 
 export enum TileEvent {
 	None = 0,
-	Error,      // input issue
-	Initialize, // start of the game
-	Shuffle,    // triggered by game itself
-	Damage,     // damaged by touch or chain reactions
-	Spawn,      // created during gameplay
-	Trail,      // left behind after a move
-	Moved,      // tile changed position
+	Initialize,   // start of the game
+	Shuffle,      // triggered by game itself
+	Damage,       // damaged by touch or chain reactions
+	Spawn,        // created during gameplay
+	Trail,        // left behind after a move
+	Moved,        // tile changed position
+	NonGameTouch, // just being responsive
 };
 
 export enum StateEvent {
 	None = 0,
 	Stuck,
-	GameOver,
-	Win,
+	Lost,
+	Won,
 };
 
 interface TileDelegate {
@@ -34,6 +35,10 @@ interface StateDelegate {
 	(value: StateEvent): void;
 }
 
+interface BoostDelegate {
+	(type: BoostType, quantity: number): void;
+}
+
 interface GetBoolDelegate {
 	(): boolean;
 }
@@ -43,5 +48,6 @@ export class GameProxy {
 	updateMoves: NumberDelegate  = null;
 	updateScore: NumberDelegate  = null;
 	updateState: StateDelegate   = null;
+	updateBoost: BoostDelegate   = null;
 	waitForAnim: GetBoolDelegate = null;
 }

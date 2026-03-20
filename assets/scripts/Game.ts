@@ -6,10 +6,17 @@ enum GameState {
 	ProcessBoard,
 	InputQueue,
 	ProcessQueue,
-	Animate,
+	WaitAnimation,
 	Stuck,
-	GameOver,
-	Win,
+	Lost,
+	Won,
+}
+
+export enum BoostType {
+	None = 0,
+	Tele,
+	Bomb,
+	__COUNT__,
 }
 
 export class GameSettings {
@@ -17,6 +24,7 @@ export class GameSettings {
 	regenLimit: number = 0;
 	movesLimit: number = 0;
 	scoreLimit: number = 0;
+	boostLimit: number[] = new Array(BoostType.__COUNT__);
 
 	set(other: GameSettings): void {
 		this.size.x = other.size.x;
@@ -24,6 +32,10 @@ export class GameSettings {
 		this.regenLimit = other.regenLimit;
 		this.movesLimit = other.movesLimit;
 		this.scoreLimit = other.scoreLimit;
+		for (let it = 0; it < this.boostLimit.length; it++) {
+			const otherValue = other.boostLimit[it];
+			this.boostLimit[it] = otherValue;
+		}
 	}
 }
 
@@ -37,6 +49,7 @@ export class Game {
 	private regen: number = 0;
 	private moves: number = 0;
 	private score: number = 0;
+	private boost: number[] = new Array(BoostType.__COUNT__);
 
 	// transient
 	private skips: boolean[] = []
@@ -45,13 +58,13 @@ export class Game {
 
 	constructor(proxy: GameProxy) {
 		this.proxy = proxy;
+
 	}
 
 	// API:
 
 	initialize(settings: GameSettings): void {
 		this.settings.set(settings);
-		this.state = GameState.None;
 
 		const boardTilesCount = settings.size.x * settings.size.y;
 		if (this.tiles.length != boardTilesCount)
@@ -62,45 +75,110 @@ export class Game {
 		this.regen = 0;
 		this.moves = 0;
 		this.score = 0;
+		for (let type = 0; type < this.boost.length; type++)
+			this.boost[type] = 0;
 
 		this.regenerateTiles();
 		if (this.proxy != null) {
 			this.proxy.updateMoves(this.moves);
 			this.proxy.updateScore(this.score);
 			this.proxy.updateState(StateEvent.None);
+			for (let type = 0; type < this.boost.length; type++) {
+				const available = this.getAvailableBoosts(type);
+				this.proxy.updateBoost(type, available);
+			}
 		}
 	}
 
-	inputShuffle(): void {
+	inputShuffle(): boolean {
 		if (this.state == GameState.Stuck) {
 			this.regenerateTiles();
 			if (this.proxy != null)
 				this.proxy.updateState(StateEvent.None);
-			this.state = GameState.Animate;
+			return true;
 		}
+		return false;
 	}
 
-	inputTouchTile(x: number, y: number): void {
-		if (x >= 0 && x < this.settings.size.x && y >= 0 && y < this.settings.size.y) {
-			const index = this.getIndex(x, y);
-			const type = this.tiles[index];
-			if (this.state == GameState.InputQueue && TileUtils.isTouchanble(type)) {
-				this.queue.length = 0; // @note only a single tile can be triggered by input
+	inputTouchTile(x: number, y: number): boolean {
+		if (x < 0 || x >= this.settings.size.x || y < 0 || y >= this.settings.size.y)
+			return false; // OOB
+
+		const index = this.getIndex(x, y);
+		const type = this.tiles[index];
+
+		if (this.state == GameState.InputQueue) {
+			this.queue.length = 0; // @note only a single tile can be triggered by input
+			if (TileUtils.isTouchanble(type)) {
 				this.queue.push(index);
+				return true; // input has been recorded for later
 			}
-			else this.proxyUpdateTile(TileEvent.Error, index, type, index, type);
 		}
+
+		return false;
+	}
+
+	inputBoost(type: BoostType,
+		sourceX: number, sourceY: number,
+		targetX: number, targetY: number
+	): boolean {
+		if (sourceX < 0 || sourceX >= this.settings.size.x || sourceY < 0 || sourceY >= this.settings.size.y)
+			return false; // OOB
+		if (targetX < 0 || targetX >= this.settings.size.x || targetY < 0 || targetY >= this.settings.size.y)
+			return false; // OOB
+
+		const available = this.getAvailableBoosts(type);
+		if (available <= 0) return false;
+
+		this.boost[type] += 1;
+		if (this.proxy != null)
+			this.proxy.updateBoost(type, available - 1);
+
+		const sourceIdx = this.getIndex(sourceX, sourceY);
+		const targetIdx = this.getIndex(targetX, targetY);
+		const sourceType = this.tiles[sourceIdx];
+		const targetType = this.tiles[targetIdx];
+
+		if (this.state == GameState.InputQueue) {
+			switch (type) {
+				case BoostType.Tele: {
+					const isValid = TileUtils.canBeTeleported(sourceType)
+					/**/         && TileUtils.canBeTeleported(targetType);
+					if (isValid) {
+						this.tiles[sourceIdx] = targetType;
+						this.tiles[targetIdx] = sourceType;
+						// @idea for purposes of VFX this might be a special case, which would mean additional coupling
+						// albeit quite minimal. need to ponder a bit more on that... ok as is for now
+						this.proxyUpdateTile(TileEvent.Moved, targetIdx, sourceType, sourceIdx, targetType);
+						this.proxyUpdateTile(TileEvent.Moved, sourceIdx, targetType, targetIdx, sourceType);
+						this.queue.length = 0; this.state = GameState.WaitAnimation; return true; // input has been applied
+					}
+				} break;
+		
+				case BoostType.Bomb: {
+					const isValid = TileUtils.isDestructible(targetType);
+					if (isValid) {
+						const radius = 2;
+						this.queue.push(targetIdx);
+						this.enqueueArea(targetIdx, radius);
+						this.state = GameState.ProcessQueue; return true; // input has been recorded for later
+					}
+				} break;
+			}
+		}
+
+		return false;
 	}
 
 	tick(dt: number): void {
 		while (true) {
 			const previousState = this.state;
 			switch (previousState) {
-				case GameState.None:         this.doStateNone();         break;
-				case GameState.ProcessBoard: this.doStateProcessBoard(); break;
-				case GameState.InputQueue:   this.doStateInputQueue();   break;
-				case GameState.ProcessQueue: this.doStateProcessQueue(); break;
-				case GameState.Animate:      this.doStateAnimate();      break;
+				case GameState.None:          this.doStateNone();         break;
+				case GameState.ProcessBoard:  this.doStateProcessBoard(); break;
+				case GameState.InputQueue:    this.doStateInputQueue();   break;
+				case GameState.ProcessQueue:  this.doStateProcessQueue(); break;
+				case GameState.WaitAnimation: this.doStateAnimate();      break;
 			}
 
 			// @note waiting for input or animating, but processing
@@ -109,10 +187,10 @@ export class Game {
 
 			if (this.proxy != null) {
 				switch (this.state) {
-					case GameState.None:     this.proxy.updateState(StateEvent.None);     break;
-					case GameState.Stuck:    this.proxy.updateState(StateEvent.Stuck);    break;
-					case GameState.GameOver: this.proxy.updateState(StateEvent.GameOver); break;
-					case GameState.Win:      this.proxy.updateState(StateEvent.Win);      break;
+					case GameState.None:  this.proxy.updateState(StateEvent.None);  break;
+					case GameState.Stuck: this.proxy.updateState(StateEvent.Stuck); break;
+					case GameState.Lost:  this.proxy.updateState(StateEvent.Lost);  break;
+					case GameState.Won:   this.proxy.updateState(StateEvent.Won);   break;
 				}
 			}
 		}
@@ -130,9 +208,9 @@ export class Game {
 			const sourceType = this.tiles[index];
 			const regenType = TileGenerator.generate();
 			this.tiles[index] = regenType;
-			if (this.proxy != null)
-				this.proxyUpdateTile(eventType, index, sourceType, index, regenType);
+			this.proxyUpdateTile(eventType, index, sourceType, index, regenType);
 		}
+		this.state = GameState.WaitAnimation; // wait for shuffle animation
 	}
 
 	private doStateNone(): void {
@@ -140,12 +218,12 @@ export class Game {
 		this.queueIndex = 0;
 
 		if (this.score >= this.settings.scoreLimit) {
-			this.state = GameState.Win;
+			this.state = GameState.Won;
 			return;
 		}
 
 		if (this.moves >= this.settings.movesLimit) {
-			this.state = GameState.GameOver;
+			this.state = GameState.Lost;
 			return;
 		}
 
@@ -154,7 +232,7 @@ export class Game {
 			? GameState.ProcessBoard
 			: this.regen <= this.settings.regenLimit
 				? GameState.Stuck
-				: GameState.GameOver
+				: GameState.Lost
 			;
 	}
 
@@ -169,11 +247,9 @@ export class Game {
 				const trailType = TileUtils.getTrailType(sourceType);
 				this.tiles[sourceIdx] = trailType;
 				this.tiles[targetIdx] = sourceType;
+				this.proxyUpdateTile(TileEvent.Trail, sourceIdx, sourceType, sourceIdx, trailType);
+				this.proxyUpdateTile(TileEvent.Moved, sourceIdx, targetType, targetIdx, sourceType);
 				change = true;
-				if (this.proxy != null) {
-					this.proxyUpdateTile(TileEvent.Trail, sourceIdx, sourceType, sourceIdx, trailType);
-					this.proxyUpdateTile(TileEvent.Moved, sourceIdx, targetType, targetIdx, sourceType);
-				}
 			}
 		}
 
@@ -182,14 +258,13 @@ export class Game {
 			if (TileUtils.isFillable(type)) {
 				const spawnType = TileGenerator.generate();
 				this.tiles[index] = spawnType;
+				this.proxyUpdateTile(TileEvent.Spawn, index, type, index, spawnType);
 				change = true;
-				if (this.proxy != null)
-					this.proxyUpdateTile(TileEvent.Spawn, index, type, index, spawnType);
 			}
 		}
 
 		this.state = change
-			? GameState.Animate
+			? GameState.WaitAnimation
 			: GameState.InputQueue;
 	}
 
@@ -205,12 +280,7 @@ export class Game {
 			this.state = GameState.ProcessQueue;
 		}
 		else {
-			if (this.proxy != null) {
-				let index = this.queue[0];
-				const type = this.tiles[index];
-				this.proxyUpdateTile(TileEvent.Error, index, type, index, type);
-			}
-			this.state = GameState.Animate;
+			this.state = GameState.WaitAnimation;
 		}
 	}
 
@@ -226,25 +296,22 @@ export class Game {
 
 			if (TileUtils.isDestructible(type)) {
 				const damagedType = TileUtils.getDamagedType(type);
-
 				this.score += TileValue.get(type);
 				this.tiles[index] = damagedType;
-
-				if (this.proxy != null)
-					this.proxyUpdateTile(TileEvent.Damage, index, type, index, damagedType);
+				this.proxyUpdateTile(TileEvent.Damage, index, type, index, damagedType);
 			}
 
 			const dmgeRadius = TileUtils.getDamageRadius(type);
 			switch (type) {
-				case TileType.BombTiny:    this.doProcessArea(index, dmgeRadius); break;
-				case TileType.BombHuge:    this.doProcessArea(index, dmgeRadius); break;
-				case TileType.RocketsVert: this.doProcessVert(index, dmgeRadius); break;
-				case TileType.RocketsHori: this.doProcessHori(index, dmgeRadius); break;
+				case TileType.BombTiny:    this.enqueueArea(index, dmgeRadius); break;
+				case TileType.BombHuge:    this.enqueueArea(index, dmgeRadius); break;
+				case TileType.RocketsVert: this.enqueueVert(index, dmgeRadius); break;
+				case TileType.RocketsHori: this.enqueueHori(index, dmgeRadius); break;
 			}
 		}
 
 		if (this.queueIndex >= this.queue.length)
-			this.state = GameState.Animate;
+			this.state = GameState.WaitAnimation;
 	}
 
 	private doStateAnimate(): void {
@@ -262,7 +329,7 @@ export class Game {
 			this.skips[i] = false;
 	}
 
-	private queueSafeOffsetAny(index: number): void {
+	private enqueueTileAny(index: number): void {
 		if (index < 0) return;
 		if (this.skips[index]) return;
 
@@ -270,7 +337,7 @@ export class Game {
 		this.queue.push(index);
 	}
 
-	private queueSafeOffsetMatching(index: number, matchType: TileType): void {
+	private enqueueTileMatching(index: number, matchType: TileType): void {
 		if (index < 0) return;
 		if (this.skips[index]) return;
 
@@ -281,7 +348,7 @@ export class Game {
 		}
 	}
 
-	private floodFillIntoQueue(index: number): number {
+	private enqueueFloodFill(index: number): number {
 		if (this.skips[index]) return 0;
 		this.skips[index] = true;
 
@@ -291,10 +358,10 @@ export class Game {
 
 		const prevLength = this.queue.length;
 		for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
-			this.queueSafeOffsetMatching(this.getOffsetIndex(index, -1,  0), type);
-			this.queueSafeOffsetMatching(this.getOffsetIndex(index,  1,  0), type);
-			this.queueSafeOffsetMatching(this.getOffsetIndex(index,  0, -1), type);
-			this.queueSafeOffsetMatching(this.getOffsetIndex(index,  0,  1), type);
+			this.enqueueTileMatching(this.getOffsetIndex(index, -1,  0), type);
+			this.enqueueTileMatching(this.getOffsetIndex(index,  1,  0), type);
+			this.enqueueTileMatching(this.getOffsetIndex(index,  0, -1), type);
+			this.enqueueTileMatching(this.getOffsetIndex(index,  0,  1), type);
 
 			if (nextIt >= this.queue.length) break;
 			index = this.queue[nextIt];
@@ -304,11 +371,70 @@ export class Game {
 		return 1 + this.queue.length - prevLength;
 	}
 
+	private enqueueArea(center: number, radius: number): void {
+		const xCenter = (center % this.settings.size.x);
+		const yCenter = Math.floor(center / this.settings.size.x);
+
+		let index = center;
+		this.skips[index] = true;
+		for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
+			const x = (index % this.settings.size.x);
+			const y = Math.floor(index / this.settings.size.x);
+			if (Math.abs(x - xCenter) < radius && Math.abs(y - yCenter) < radius) {
+				this.enqueueTileAny(this.getOffsetIndex(index, -1,  0));
+				this.enqueueTileAny(this.getOffsetIndex(index,  1,  0));
+				this.enqueueTileAny(this.getOffsetIndex(index,  0, -1));
+				this.enqueueTileAny(this.getOffsetIndex(index,  0,  1));
+
+				this.enqueueTileAny(this.getOffsetIndex(index, -1, -1));
+				this.enqueueTileAny(this.getOffsetIndex(index,  1, -1));
+				this.enqueueTileAny(this.getOffsetIndex(index, -1,  1));
+				this.enqueueTileAny(this.getOffsetIndex(index,  1,  1));
+			}
+
+			if (nextIt >= this.queue.length) break;
+			index = this.queue[nextIt];
+		}
+		this.resetSkips();
+	}
+
+	private enqueueVert(center: number, radius: number): void {
+		for (let offset = -radius; offset <= radius; offset++) {
+			let index = this.getOffsetIndex(center, offset, 0);
+			if (index < 0) continue;
+			this.skips[index] = true;
+			for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
+				this.enqueueTileAny(this.getOffsetIndex(index, 0, -1));
+				this.enqueueTileAny(this.getOffsetIndex(index, 0,  1));
+				
+				if (nextIt >= this.queue.length) break;
+				index = this.queue[nextIt];
+			}
+		}
+		this.resetSkips();
+	}
+
+	private enqueueHori(center: number, radius: number): void {
+		for (let offset = -radius; offset <= radius; offset++) {
+			let index = this.getOffsetIndex(center, 0, offset);
+			if (index < 0) continue;
+			this.skips[index] = true;
+			for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
+				this.enqueueTileAny(this.getOffsetIndex(index, -1, 0));
+				this.enqueueTileAny(this.getOffsetIndex(index,  1, 0));
+				
+				if (nextIt >= this.queue.length) break;
+				index = this.queue[nextIt];
+			}
+		}
+		this.resetSkips();
+	}
+
 	private preprocessBoard(): boolean {
 		let foundMinArea = false;
 		for (let index = 0; index < this.tiles.length; index++) {
 			this.queue.push(index);
-			const area = this.floodFillIntoQueue(index);
+			const area = this.enqueueFloodFill(index);
 			this.queue.length = 0;
 
 			const type = this.tiles[index];
@@ -326,70 +452,11 @@ export class Game {
 
 	private preprocessInputQueue(): boolean {
 		const index = this.queue[0];
-		const area = this.floodFillIntoQueue(index);
+		const area = this.enqueueFloodFill(index);
 		const type = this.tiles[index];
 		const minArea = TileUtils.getMinAreaToDamage(type);
 		this.resetSkips();
 		return area >= minArea;
-	}
-
-	private doProcessArea(center: number, radius: number): void {
-		const xCenter = (center % this.settings.size.x);
-		const yCenter = Math.floor(center / this.settings.size.x);
-
-		let index = center;
-		this.skips[index] = true;
-		for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
-			const x = (index % this.settings.size.x);
-			const y = Math.floor(index / this.settings.size.x);
-			if (Math.abs(x - xCenter) < radius && Math.abs(y - yCenter) < radius) {
-				this.queueSafeOffsetAny(this.getOffsetIndex(index, -1,  0));
-				this.queueSafeOffsetAny(this.getOffsetIndex(index,  1,  0));
-				this.queueSafeOffsetAny(this.getOffsetIndex(index,  0, -1));
-				this.queueSafeOffsetAny(this.getOffsetIndex(index,  0,  1));
-
-				this.queueSafeOffsetAny(this.getOffsetIndex(index, -1, -1));
-				this.queueSafeOffsetAny(this.getOffsetIndex(index,  1, -1));
-				this.queueSafeOffsetAny(this.getOffsetIndex(index, -1,  1));
-				this.queueSafeOffsetAny(this.getOffsetIndex(index,  1,  1));
-			}
-
-			if (nextIt >= this.queue.length) break;
-			index = this.queue[nextIt];
-		}
-		this.resetSkips();
-	}
-
-	private doProcessVert(center: number, radius: number): void {
-		for (let offset = -radius; offset <= radius; offset++) {
-			let index = this.getOffsetIndex(center, offset, 0);
-			if (index < 0) continue;
-			this.skips[index] = true;
-			for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
-				this.queueSafeOffsetAny(this.getOffsetIndex(index, 0, -1));
-				this.queueSafeOffsetAny(this.getOffsetIndex(index, 0,  1));
-				
-				if (nextIt >= this.queue.length) break;
-				index = this.queue[nextIt];
-			}
-		}
-		this.resetSkips();
-	}
-
-	private doProcessHori(center: number, radius: number): void {
-		for (let offset = -radius; offset <= radius; offset++) {
-			let index = this.getOffsetIndex(center, 0, offset);
-			if (index < 0) continue;
-			this.skips[index] = true;
-			for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
-				this.queueSafeOffsetAny(this.getOffsetIndex(index, -1, 0));
-				this.queueSafeOffsetAny(this.getOffsetIndex(index,  1, 0));
-				
-				if (nextIt >= this.queue.length) break;
-				index = this.queue[nextIt];
-			}
-		}
-		this.resetSkips();
 	}
 
 	// HELPERS:
@@ -410,10 +477,17 @@ export class Game {
 		return this.getIndex(x, y);
 	}
 
+	private getAvailableBoosts(type: BoostType) {
+		const used = this.boost[type];
+		const limit = this.settings.boostLimit[type];
+		return limit - used;
+	}
+
 	private proxyUpdateTile(eventType: TileEvent,
 		sourceIndex: number, sourceType: TileType,
 		targetIndex: number, targetType: TileType
 	): void {
+		if (this.proxy == null) return;
 		const sourceX = sourceIndex % this.settings.size.x;
 		const sourceY = Math.floor(sourceIndex / this.settings.size.x);
 		const targetX = targetIndex % this.settings.size.x;

@@ -6,15 +6,21 @@
 //  - https://docs.cocos.com/creator/2.4/manual/en/scripting/life-cycle-s.html
 
 import { TileType } from "./Tile";
-import { Game, GameSettings } from "./Game";
+import { BoostType, Game, GameSettings } from "./Game";
 import { TileEvent, GameProxy, StateEvent } from "./GameProxy";
 
 const {ccclass, property} = cc._decorator;
 
 class Tile {
-	x: number;
-	y: number;
-	type: TileType;
+	type: TileType = TileType.None;
+	x: number = -1;
+	y: number = -1;
+}
+
+class Boost {
+	type: BoostType = BoostType.None;
+	x: number = -1;
+	y: number = -1;
 }
 
 class Message {
@@ -29,7 +35,7 @@ class Message {
 		switch (this.tileEvent) {
 			case TileEvent.Initialize: return 0;
 			case TileEvent.Shuffle:    return 2;
-			case TileEvent.Error:      return 0.1;
+			case TileEvent.NonGameTouch:      return 0.1;
 			case TileEvent.Damage:     return 0.4;
 			case TileEvent.Spawn:      return 0.1;
 			case TileEvent.Trail:      return 0.1;
@@ -41,7 +47,7 @@ class Message {
 	isBlocking(): boolean {
 		switch (this.tileEvent) {
 			case TileEvent.None:  return false;
-			case TileEvent.Error: return false;
+			case TileEvent.NonGameTouch: return false;
 		}
 		return true;
 	}
@@ -78,13 +84,13 @@ export default class EntryPoint extends cc.Component {
 	boosterBombLabel: cc.Label = null;
 
 	@property(cc.Button)
-	overlayShuffle: cc.Button = null;
+	overlayStuck: cc.Button = null;
 
 	@property(cc.Button)
-	overlayGameOver: cc.Button = null;
+	overlayLost: cc.Button = null;
 
 	@property(cc.Button)
-	overlayWin: cc.Button = null;
+	overlayWon: cc.Button = null;
 
 	private tiles: cc.Sprite[] = [];
 
@@ -95,6 +101,8 @@ export default class EntryPoint extends cc.Component {
 	private messages: Message[] = []
 	private messagesSet: number = 0; // @note reuse message instances
 	private messagesTime: number = 0;
+
+	private boost: Boost = new Boost();
 
 	// LIFE-CYCLE:
 
@@ -109,10 +117,10 @@ export default class EntryPoint extends cc.Component {
 		// setup input
 		this.grid.node.on(cc.Node.EventType.TOUCH_START, this.onTouchStart, this, true);
 		this.boosterTeleButton.clickEvents.push(this.createEventHanler("boosterTeleOnClick"));
-		this.boosterBombButton.clickEvents.push(this.createEventHanler("boosterBomOnClick"));
-		this.overlayShuffle.clickEvents.push(this.createEventHanler("shuffleOnClick"));
-		this.overlayGameOver.clickEvents.push(this.createEventHanler("gameOverOnClick"));
-		this.overlayWin.clickEvents.push(this.createEventHanler("winOnClick"));
+		this.boosterBombButton.clickEvents.push(this.createEventHanler("boosterBombOnClick"));
+		this.overlayStuck.clickEvents.push(this.createEventHanler("overlayStuckOnClick"));
+		this.overlayLost.clickEvents.push(this.createEventHanler("overlayLostOnClick"));
+		this.overlayWon.clickEvents.push(this.createEventHanler("overlayWonOnClick"));
 
 		// setup proxy
 		this.gameProxy.updateTile = (eventType: TileEvent,
@@ -128,6 +136,7 @@ export default class EntryPoint extends cc.Component {
 		this.gameProxy.updateMoves = (value: number): void => { this.updateMoves(value); }
 		this.gameProxy.updateScore = (value: number): void => { this.updateScore(value); }
 		this.gameProxy.updateState = (value: StateEvent): void => { this.updateState(value); }
+		this.gameProxy.updateBoost = (type: BoostType, quantity: number): void => { this.updateBoost(type, quantity); }
 		this.gameProxy.waitForAnim = (): boolean => { return this.isAnimationBlocking(); }
 
 		// setup settings
@@ -136,6 +145,8 @@ export default class EntryPoint extends cc.Component {
 		this.settings.regenLimit = 3;
 		this.settings.movesLimit = 30;
 		this.settings.scoreLimit = 300;
+		this.settings.boostLimit[BoostType.Tele] = 10;
+		this.settings.boostLimit[BoostType.Bomb] = 10;
 	}
 
 	start(): void {
@@ -161,27 +172,54 @@ export default class EntryPoint extends cc.Component {
 		const baseY = this.grid.node.parent.position.y + this.grid.node.position.y + this.grid.paddingBottom;
 		const x = Math.floor((pos.x - baseX) / this.getCellWidth());
 		const y = Math.floor((pos.y - baseY) / this.getCellHeight());
-		if (x >= 0 && x < this.settings.size.x && y >= 0 && y < this.settings.size.y)
-			this.game.inputTouchTile(x, y);
+
+		if (x < 0 || x >= this.settings.size.x || y < 0 || y >= this.settings.size.y)
+			return; // OOB
+
+		this.pushMessageTouch(x, y);
+
+		switch (this.boost.type) {
+			case BoostType.None:
+				this.game.inputTouchTile(x, y);
+				break;
+
+			case BoostType.Tele:
+				if (this.boost.x == -1 || this.boost.y == -1) {
+					this.boost.x = x;
+					this.boost.y = y;
+				}
+				else {
+					this.game.inputBoost(this.boost.type, this.boost.x, this.boost.y, x, y);
+					this.boost.type = BoostType.None;
+				}
+				break;
+
+			case BoostType.Bomb:
+				this.game.inputBoost(this.boost.type, x, y, x, y);
+				this.boost.type = BoostType.None;
+				break;
+		}
 	}
 
 	private boosterTeleOnClick (event: Event, customEventData: string): void {
-		console.log("clicked booster tele");
+		this.boost.type = BoostType.Tele;
+		this.boost.x = -1;
+		this.boost.y = -1;
 	}
 	
 	private boosterBombOnClick (event: Event, customEventData: string): void {
-		console.log("clicked booster bomb");
+		this.boost.type = BoostType.Bomb;
 	}
 	
-	private shuffleOnClick (event: Event, customEventData: string): void {
+	private overlayStuckOnClick (event: Event, customEventData: string): void {
 		this.game.inputShuffle();
 	}
 	
-	private gameOverOnClick (event: Event, customEventData: string): void {
+	private overlayLostOnClick (event: Event, customEventData: string): void {
 		this.initializeGame();
 	}
 	
-	private winOnClick (event: Event, customEventData: string): void {
+	private overlayWonOnClick (event: Event, customEventData: string): void {
 		this.initializeGame();
 	}
 
@@ -229,9 +267,16 @@ export default class EntryPoint extends cc.Component {
 	}
 
 	private updateState(state: StateEvent): void {
-		this.overlayShuffle.node.active = state == StateEvent.Stuck;
-		this.overlayGameOver.node.active = state == StateEvent.GameOver;
-		this.overlayWin.node.active = state == StateEvent.Win;
+		this.overlayStuck.node.active = state == StateEvent.Stuck;
+		this.overlayLost.node.active = state == StateEvent.Lost;
+		this.overlayWon.node.active = state == StateEvent.Won;
+	}
+
+	private updateBoost(type: BoostType, quantity: number): void {
+		switch (type) {
+			case BoostType.Tele: this.boosterTeleLabel.string = quantity.toString(); break;
+			case BoostType.Bomb: this.boosterBombLabel.string = quantity.toString(); break;
+		}
 	}
 
 	// MESSAGING:
@@ -267,6 +312,11 @@ export default class EntryPoint extends cc.Component {
 		message.target.y    = targetY;
 		message.target.type = targetType;
 	}
+
+	private pushMessageTouch(x: number, y: number) {
+		const type: TileType = undefined; // @note don't care, touch event shouldn't affect sprite frame
+		this.pushMessage(TileEvent.NonGameTouch, x, y, type, x, y, type);
+	}
 	
 	private processMessages(dt: number): void {
 		const prevSet = this.messagesSet;
@@ -283,7 +333,7 @@ export default class EntryPoint extends cc.Component {
 			const progress = duration > 0 ? Math.min(elapsed / duration, 1) : 1;
 
 			switch (message.tileEvent) {
-				case TileEvent.Error: {
+				case TileEvent.NonGameTouch: {
 					const amplitude = 20;
 					const frequency = Math.PI * 2;
 					instance.node.angle = amplitude * Math.sin(frequency * progress);
