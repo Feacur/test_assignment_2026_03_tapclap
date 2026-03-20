@@ -31,14 +31,14 @@ export abstract class TileGenerator {
 		TileGenerator.weights[TileType.RocketsHori] = 10;
 		//
 		TileGenerator.weightsSum = 0;
-		for (let index = 0; index < TileGenerator.weights.length; index++)
-			TileGenerator.weightsSum += TileGenerator.weights[index];
+		for (let type: TileType = 0; type < TileGenerator.weights.length; type++)
+			TileGenerator.weightsSum += TileGenerator.weights[type];
 	}
 
 	public static generate(): TileType {
 		// @todo use seed
 		let rnd = Utils.randomRange(0, TileGenerator.weightsSum);
-		for (let type = 0; type < TileGenerator.weights.length; type++) {
+		for (let type: TileType = 0; type < TileGenerator.weights.length; type++) {
 			rnd -= TileGenerator.weights[type];
 			if (rnd <= 0) return type;
 		}

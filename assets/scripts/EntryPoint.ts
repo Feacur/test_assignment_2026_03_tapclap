@@ -74,16 +74,10 @@ export default class EntryPoint extends cc.Component {
 	tileSpriteFrames: cc.SpriteFrame[] = new Array(TileType.__COUNT__);
 
 	@property(cc.Button)
-	boosterTeleButton: cc.Button = null;
+	boostButtons: cc.Button[] = new Array(BoostType.__COUNT__);
 
 	@property(cc.Label)
-	boosterTeleLabel: cc.Label = null;
-
-	@property(cc.Button)
-	boosterBombButton: cc.Button = null;
-
-	@property(cc.Label)
-	boosterBombLabel: cc.Label = null;
+	boostLabels: cc.Label[] = new Array(BoostType.__COUNT__);
 
 	@property(cc.Button)
 	overlayStuck: cc.Button = null;
@@ -109,20 +103,34 @@ export default class EntryPoint extends cc.Component {
 	// LIFE-CYCLE:
 
 	onLoad(): void {
-		// sanity check sprites
 		this.grid.enabled = false;
+
+		// sanity check sprites
 		if (this.tileSpriteFrames.length != TileType.__COUNT__) {
 			this.tileSpriteFrames.length = TileType.__COUNT__;
 			console.log("[warn] `tileSpriteFrames` length reset to %d", TileType.__COUNT__);
 		}
 
+		if (this.boostButtons.length != BoostType.__COUNT__) {
+			this.boostButtons.length = BoostType.__COUNT__;
+			console.log("[warn] `boostButtons` length reset to %d", BoostType.__COUNT__);
+		}
+
+		if (this.boostLabels.length != BoostType.__COUNT__) {
+			this.boostLabels.length = BoostType.__COUNT__;
+			console.log("[warn] `boostLabels` length reset to %d", BoostType.__COUNT__);
+		}
+
 		// setup input
 		this.grid.node.on(cc.Node.EventType.TOUCH_START, this.onTouchStart, this, true);
-		this.boosterTeleButton.clickEvents.push(this.createEventHanler("boosterTeleOnClick"));
-		this.boosterBombButton.clickEvents.push(this.createEventHanler("boosterBombOnClick"));
-		this.overlayStuck.clickEvents.push(this.createEventHanler("overlayStuckOnClick"));
-		this.overlayLost.clickEvents.push(this.createEventHanler("overlayLostOnClick"));
-		this.overlayWon.clickEvents.push(this.createEventHanler("overlayWonOnClick"));
+		for (let type: BoostType = 0; type < this.boostButtons.length; type++) {
+			const button = this.boostButtons[type];
+			if (button != null)
+				button.clickEvents.push(this.createEventHanler("boostOnClick", BoostType[type]));
+		}
+		this.overlayStuck.clickEvents.push(this.createEventHanler("overlayStuckOnClick", null));
+		this.overlayLost.clickEvents.push(this.createEventHanler("overlayLostOnClick", null));
+		this.overlayWon.clickEvents.push(this.createEventHanler("overlayWonOnClick", null));
 
 		// setup proxy
 		this.gameProxy.updateTile = (eventType: TileEvent,
@@ -190,35 +198,30 @@ export default class EntryPoint extends cc.Component {
 				}
 				else {
 					this.game.inputBoost(this.boost.type, this.boost.x, this.boost.y, x, y);
-					this.boost.type = BoostType.None;
+					this.toggleBoost(BoostType.None);
 				}
 				break;
 
 			case BoostType.Bomb:
 				this.game.inputBoost(this.boost.type, x, y, x, y);
-				this.boost.type = BoostType.None;
+				this.toggleBoost(BoostType.None);
 				break;
 		}
 	}
 
-	private boosterTeleOnClick (event: Event, customEventData: string): void {
-		this.boost.type = BoostType.Tele;
-		this.boost.x = -1;
-		this.boost.y = -1;
+	private boostOnClick (event: Event, customEventData: string): void {
+		const type: BoostType = BoostType[customEventData];
+		this.toggleBoost(type);
 	}
-	
-	private boosterBombOnClick (event: Event, customEventData: string): void {
-		this.boost.type = BoostType.Bomb;
-	}
-	
+
 	private overlayStuckOnClick (event: Event, customEventData: string): void {
 		this.game.inputShuffle();
 	}
-	
+
 	private overlayLostOnClick (event: Event, customEventData: string): void {
 		this.initializeGame();
 	}
-	
+
 	private overlayWonOnClick (event: Event, customEventData: string): void {
 		this.initializeGame();
 	}
@@ -272,10 +275,9 @@ export default class EntryPoint extends cc.Component {
 	}
 
 	private updateBoost(type: BoostType, quantity: number): void {
-		switch (type) {
-			case BoostType.Tele: this.boosterTeleLabel.string = quantity.toString(); break;
-			case BoostType.Bomb: this.boosterBombLabel.string = quantity.toString(); break;
-		}
+		const label = this.boostLabels[type];
+		if (label != null)
+			label.string = quantity.toString();
 	}
 
 	// MESSAGING:
@@ -443,11 +445,26 @@ export default class EntryPoint extends cc.Component {
 		);
 	}
 
-	private createEventHanler(handler: string): cc.Component.EventHandler {
+	private createEventHanler(handler: string, data: string): cc.Component.EventHandler {
 		const ret = new cc.Component.EventHandler();
 		ret.target = this.node;
 		ret.component = "EntryPoint"; // `EntryPoint.name` will be null in the build
 		ret.handler = handler; // `function.name` is null in dev mode anyway
+		ret.customEventData = data;
 		return ret;
+	}
+	
+	private toggleBoost(chosenType: BoostType): void {
+		this.boost.type = this.boost.type == chosenType
+			? BoostType.None
+			: chosenType;
+		this.boost.x = -1;
+		this.boost.y = -1;
+
+		for (let type: BoostType = 0; type < this.boostButtons.length; type++) {
+			const button = this.boostButtons[type];
+			if (button != null)
+				button.target.scale = this.boost.type == type ? 1.2 : 1;
+		}
 	}
 }

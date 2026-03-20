@@ -29,9 +29,9 @@ export class GameSettings {
 		this.regenLimit = other.regenLimit;
 		this.movesLimit = other.movesLimit;
 		this.scoreLimit = other.scoreLimit;
-		for (let it = 0; it < this.boostLimit.length; it++) {
-			const otherValue = other.boostLimit[it];
-			this.boostLimit[it] = otherValue;
+		for (let type: BoostType = 0; type < this.boostLimit.length; type++) {
+			const otherValue = other.boostLimit[type];
+			this.boostLimit[type] = otherValue;
 		}
 	}
 }
@@ -72,7 +72,7 @@ export class Game {
 		this.regen = 0;
 		this.moves = 0;
 		this.score = 0;
-		for (let type = 0; type < this.boost.length; type++)
+		for (let type: BoostType = 0; type < this.boost.length; type++)
 			this.boost[type] = 0;
 
 		this.regenerateTiles();
@@ -80,7 +80,7 @@ export class Game {
 			this.proxy.updateMoves(this.moves, this.settings.movesLimit);
 			this.proxy.updateScore(this.score, this.settings.scoreLimit);
 			this.proxy.updateState(StateEvent.None);
-			for (let type = 0; type < this.boost.length; type++) {
+			for (let type: BoostType = 0; type < this.boost.length; type++) {
 				const available = this.getAvailableBoosts(type);
 				this.proxy.updateBoost(type, available);
 			}
