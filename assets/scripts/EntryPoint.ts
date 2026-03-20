@@ -26,7 +26,7 @@ class Message {
 		switch (this.eventType) {
 			case EventType.Errr: return 0.1;
 			case EventType.Fill: return 0.1;
-			case EventType.Wipe: return 0.2;
+			case EventType.Wipe: return 0.4;
 			case EventType.Move: return 0.1;
 			case EventType.Yank: return 0.1;
 		}
@@ -108,6 +108,7 @@ export default class EntryPoint extends cc.Component {
 			sourceX: number, sourceY: number, sourceType: TileType,
 			targetX: number, targetY: number, targetType: TileType
 		) => {
+			// @todo compress messages with overlapping responsibilities into a single one
 			this.pushMessage(eventType,
 				sourceX, sourceY, sourceType,
 				targetX, targetY, targetType
@@ -259,9 +260,9 @@ export default class EntryPoint extends cc.Component {
 			const message = this.messages[it];
 			const index = this.getIndex(message.target.x, message.target.y);
 			const instance = this.tiles[index];
+
 			const duration = message.getDuration();
 			const progress = duration > 0 ? Math.min(this.messagesTime / duration, 1) : 1;
-
 			if (progress < 1) done = false;
 
 			switch (message.eventType) {
@@ -272,25 +273,25 @@ export default class EntryPoint extends cc.Component {
 				} break;
 
 				case EventType.Init: {
-					instance.scale = progress;
+					instance.scale = 1;
 					const visualType = message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
 				case EventType.Fill: {
-					instance.scale = progress;
+					instance.scale = cc.easing.circIn(progress);
 					const visualType = message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
 				case EventType.Wipe: {
-					instance.scale = 1 - progress;
+					instance.scale = 1 - cc.easing.backIn(progress);
 					const visualType = progress < 0.8 ? message.source.type : message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
 				case EventType.Yank: {
-					instance.scale = 1 - progress;
+					instance.scale = 1;
 					const visualType = message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
@@ -300,6 +301,7 @@ export default class EntryPoint extends cc.Component {
 					const visualType = message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 
+					// @todo bounce when an obstacle reached
 					const visualX = cc.lerp(message.source.x, message.target.x, progress);
 					const visualY = cc.lerp(message.source.y, message.target.y, progress);
 					this.setTileVisualPosition(instance, visualX, visualY);
