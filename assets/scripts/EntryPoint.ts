@@ -24,11 +24,11 @@ class Message {
 
 	getDuration(): number {
 		switch (this.eventType) {
-			case EventType.Errr: return 0.1;
-			case EventType.Fill: return 0.1;
-			case EventType.Wipe: return 0.4;
-			case EventType.Move: return 0.1;
-			case EventType.Yank: return 0.1;
+			case EventType.Error:  return 0.1;
+			case EventType.Spawn:  return 0.1;
+			case EventType.Damage: return 0.4;
+			case EventType.Moved:  return 0.1;
+			case EventType.Trail:  return 0.1;
 		}
 		return 0;
 	}
@@ -232,7 +232,7 @@ export default class EntryPoint extends cc.Component {
 	private pushMessage(eventType: EventType,
 		sourceX: number, sourceY: number, sourceType: TileType,
 		targetX: number, targetY: number, targetType: TileType
-	) {
+	) { // @note messages array can be prepopulated, OTOH it's not a bottleneck anyway
 		if (this.messagesSet >= this.messages.length)
 			this.messages.push(new Message());
 
@@ -266,7 +266,7 @@ export default class EntryPoint extends cc.Component {
 			if (progress < 1) done = false;
 
 			switch (message.eventType) {
-				case EventType.Errr: {
+				case EventType.Error: {
 					const amplitude = 20;
 					const frequency = Math.PI * 2;
 					instance.rotation = amplitude * Math.sin(frequency * progress);
@@ -278,25 +278,25 @@ export default class EntryPoint extends cc.Component {
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
-				case EventType.Fill: {
+				case EventType.Spawn: {
 					instance.scale = cc.easing.circIn(progress);
 					const visualType = message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
-				case EventType.Wipe: {
+				case EventType.Damage: {
 					instance.scale = 1 - cc.easing.backIn(progress);
 					const visualType = progress < 0.8 ? message.source.type : message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
-				case EventType.Yank: {
+				case EventType.Trail: {
 					instance.scale = 1;
 					const visualType = message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
-				case EventType.Move: {
+				case EventType.Moved: {
 					instance.scale = 1;
 					const visualType = message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);

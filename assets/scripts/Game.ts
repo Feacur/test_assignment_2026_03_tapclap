@@ -99,13 +99,13 @@ export class Game {
 			const targetType = this.tiles[targetIdx];
 			const sourceType = this.tiles[sourceIdx];
 			if (TileUtils.canBeMoveSource(sourceType) && TileUtils.canBeMoveTarget(targetType)) {
-				const moveTrailType = TileUtils.getMoveTrailType(sourceType);
-				this.tiles[sourceIdx] = moveTrailType;
+				const trailType = TileUtils.getTrailType(sourceType);
+				this.tiles[sourceIdx] = trailType;
 				this.tiles[targetIdx] = sourceType;
 				change = true;
 				if (this.proxy != null) {
-					this.proxyUpdateTile(EventType.Yank, sourceIdx, sourceType, sourceIdx, moveTrailType);
-					this.proxyUpdateTile(EventType.Move, sourceIdx, targetType, targetIdx, sourceType);
+					this.proxyUpdateTile(EventType.Trail, sourceIdx, sourceType, sourceIdx, trailType);
+					this.proxyUpdateTile(EventType.Moved, sourceIdx, targetType, targetIdx, sourceType);
 				}
 			}
 		}
@@ -113,11 +113,11 @@ export class Game {
 		for (let index = this.tiles.length - this.size.x; index < this.tiles.length; index++) {
 			const type = this.tiles[index];
 			if (TileUtils.isFillable(type)) {
-				const nextType = TileGenerator.generate();
-				this.tiles[index] = nextType;
+				const spawnType = TileGenerator.generate();
+				this.tiles[index] = spawnType;
 				change = true;
 				if (this.proxy != null)
-					this.proxyUpdateTile(EventType.Fill, index, type, index, nextType);
+					this.proxyUpdateTile(EventType.Spawn, index, type, index, spawnType);
 			}
 		}
 
@@ -141,7 +141,7 @@ export class Game {
 			if (this.proxy != null) {
 				let index = this.queue[0];
 				const type = this.tiles[index];
-				this.proxyUpdateTile(EventType.Errr, index, type, index, type);
+				this.proxyUpdateTile(EventType.Error, index, type, index, type);
 			}
 			this.state = GameState.Animate;
 		}
@@ -158,21 +158,21 @@ export class Game {
 			const type = this.tiles[index];
 
 			if (TileUtils.isDestructible(type)) {
-				const wipeTrailType = TileUtils.getWipeTrailType(type);
+				const damagedType = TileUtils.getDamagedType(type);
 
 				this.score += TileValue.get(type);
-				this.tiles[index] = wipeTrailType;
+				this.tiles[index] = damagedType;
 
 				if (this.proxy != null)
-					this.proxyUpdateTile(EventType.Wipe, index, type, index, wipeTrailType);
+					this.proxyUpdateTile(EventType.Damage, index, type, index, damagedType);
 			}
 
-			const wipeRadius = TileUtils.getWipeRadius(type);
+			const dmgeRadius = TileUtils.getDamageRadius(type);
 			switch (type) {
-				case TileType.BombTiny:    this.doProcessArea(index, wipeRadius); break;
-				case TileType.BombHuge:    this.doProcessArea(index, wipeRadius); break;
-				case TileType.RocketsVert: this.doProcessVert(index, wipeRadius); break;
-				case TileType.RocketsHori: this.doProcessHori(index, wipeRadius); break;
+				case TileType.BombTiny:    this.doProcessArea(index, dmgeRadius); break;
+				case TileType.BombHuge:    this.doProcessArea(index, dmgeRadius); break;
+				case TileType.RocketsVert: this.doProcessVert(index, dmgeRadius); break;
+				case TileType.RocketsHori: this.doProcessHori(index, dmgeRadius); break;
 			}
 		}
 
@@ -233,8 +233,8 @@ export class Game {
 	private verifyInputQueue(): boolean {
 		let index = this.queue[0];
 		const type = this.tiles[index];
-		const minTilesCountForWipe = TileUtils.getMinTilesCountForWipe(type);
-		return this.queue.length >= minTilesCountForWipe;
+		const minTilesCountForDmge = TileUtils.getMinTilesCountForDmge(type);
+		return this.queue.length >= minTilesCountForDmge;
 	}
 
 	private doProcessArea(center: number, radius: number): void {

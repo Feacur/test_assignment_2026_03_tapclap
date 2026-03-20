@@ -76,7 +76,7 @@ export abstract class TileUtils {
 		return true;
 	}
 
-	static getMinTilesCountForWipe(type: TileType): number {
+	static getMinTilesCountForDmge(type: TileType): number {
 		switch (type) {
 			case TileType.Blue:
 			case TileType.Green:
@@ -136,15 +136,15 @@ export abstract class TileUtils {
 		return false;
 	}
 
-	static getMoveTrailType(type: TileType): TileType {
+	static getTrailType(type: TileType): TileType {
 		return TileType.None;
 	}
 
-	static getWipeTrailType(type: TileType): TileType {
+	static getDamagedType(type: TileType): TileType {
 		return TileType.None;
 	}
 
-	static getWipeRadius(type: TileType): number {
+	static getDamageRadius(type: TileType): number {
 		switch (type) {
 			case TileType.BombTiny:    return 1;
 			case TileType.BombHuge:    return 2;
