@@ -57,13 +57,14 @@ export class Game {
 	}
 
 	inputTouchTile(x: number, y: number): void {
-		if (this.state != GameState.InputQueue) return;
-		this.queue.length = 0; // @note only a single tile can be triggered by input
 		if (x >= 0 && x < this.size.x && y >= 0 && y < this.size.y) {
 			const index = this.getIndex(x, y);
 			const type = this.tiles[index];
-			if (TileUtils.isTouchanble(type))
+			if (this.state == GameState.InputQueue && TileUtils.isTouchanble(type)) {
+				this.queue.length = 0; // @note only a single tile can be triggered by input
 				this.queue.push(index);
+			}
+			else this.proxyUpdateTile(EventType.Error, index, type, index, type);
 		}
 	}
 

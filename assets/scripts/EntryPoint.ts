@@ -18,19 +18,29 @@ class Tile {
 }
 
 class Message {
+	time: number;
 	eventType: EventType;
 	source: Tile = new Tile();
 	target: Tile = new Tile();
 
 	getDuration(): number {
 		switch (this.eventType) {
-			case EventType.Error:  return 0.1;
-			case EventType.Spawn:  return 0.1;
-			case EventType.Damage: return 0.4;
-			case EventType.Moved:  return 0.1;
-			case EventType.Trail:  return 0.1;
+			case EventType.Error:   return 0.1;
+			case EventType.Damage:  return 0.4;
+			// @note Spawn, Trail, Moved are better being in sync
+			case EventType.Spawn:   return 0.1;
+			case EventType.Trail:   return 0.1;
+			case EventType.Moved:   return 0.1;
 		}
 		return 0;
+	}
+
+	isBlocking(): boolean {
+		switch (this.eventType) {
+			case EventType.None:  return false;
+			case EventType.Error: return false;
+		}
+		return true;
 	}
 }
 
@@ -116,7 +126,7 @@ export default class EntryPoint extends cc.Component {
 		}
 		this.gameProxy.updateMoves = (value: number): void => { this.updateMoves(value); }
 		this.gameProxy.updateScore = (value: number): void => { this.updateScore(value); }
-		this.gameProxy.waitForAnim = (): boolean => { return this.messagesSet > 0; }
+		this.gameProxy.waitForAnim = (): boolean => { return this.isAnimationBlocking(); }
 	}
 
 	start(): void {
@@ -229,6 +239,16 @@ export default class EntryPoint extends cc.Component {
 		return this.grid.paddingBottom + this.tilePrefab.data.height * this.tilePrefab.data.anchorY;
 	}
 
+	private isAnimationBlocking(): boolean {
+		// @optimize or cache numbers on push and pop
+		for (let it = 0; it < this.messagesSet; it++) {
+			const message = this.messages[it];
+			if (message.isBlocking())
+				return true;
+		}
+		return false;
+	}
+
 	private pushMessage(eventType: EventType,
 		sourceX: number, sourceY: number, sourceType: TileType,
 		targetX: number, targetY: number, targetType: TileType
@@ -239,6 +259,7 @@ export default class EntryPoint extends cc.Component {
 		const message = this.messages[this.messagesSet];
 		this.messagesSet += 1;
 
+		message.time = this.messagesTime;
 		message.eventType = eventType;
 
 		message.source.x    = sourceX;
@@ -254,7 +275,6 @@ export default class EntryPoint extends cc.Component {
 		const prevSet = this.messagesSet;
 
 		// animate
-		let done = true;
 		this.messagesTime += dt;
 		for (let it = 0; it < this.messagesSet; it++) {
 			const message = this.messages[it];
@@ -262,8 +282,8 @@ export default class EntryPoint extends cc.Component {
 			const instance = this.tiles[index];
 
 			const duration = message.getDuration();
-			const progress = duration > 0 ? Math.min(this.messagesTime / duration, 1) : 1;
-			if (progress < 1) done = false;
+			const elapsed = this.messagesTime - message.time;
+			const progress = duration > 0 ? Math.min(elapsed / duration, 1) : 1;
 
 			switch (message.eventType) {
 				case EventType.Error: {
@@ -278,26 +298,25 @@ export default class EntryPoint extends cc.Component {
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
+				case EventType.Damage: {
+					const pivotMoment = 0.8;
+					instance.scale = progress < pivotMoment ? 1 - cc.easing.backIn(progress) : 1;
+					const visualType = progress < pivotMoment ? message.source.type : message.target.type;
+					this.updateTile(message.target.x, message.target.y, visualType);
+				} break;
+
 				case EventType.Spawn: {
 					instance.scale = cc.easing.circIn(progress);
 					const visualType = message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
-				case EventType.Damage: {
-					instance.scale = 1 - cc.easing.backIn(progress);
-					const visualType = progress < 0.8 ? message.source.type : message.target.type;
-					this.updateTile(message.target.x, message.target.y, visualType);
-				} break;
-
 				case EventType.Trail: {
-					instance.scale = 1;
 					const visualType = message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
 				case EventType.Moved: {
-					instance.scale = 1;
 					const visualType = message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 
@@ -311,22 +330,21 @@ export default class EntryPoint extends cc.Component {
 
 		// @note it's possible to drop messages in the middle, but we risk
 		// putting the UI into faulty state depending on duration settings
-		// remove completed
-		// this.messagesSet = 0;
-		// for (let it = 0; it < prevSet; it++) {
-		// 	const message = this.messages[it];
-		// 	const emptyIndex = this.messagesSet;
-		// 	if (this.messagesTime < message.getDuration()) {
-		// 		this.messagesSet += 1;
-		// 		if (emptyIndex < it) {
-		// 			this.messages[it] = this.messages[emptyIndex]; // move processed up
-		// 			this.messages[emptyIndex] = message;           // move pending down
-		// 		}
-		// 	}
-		// }
+		this.messagesSet = 0;
+		for (let it = 0; it < prevSet; it++) {
+			const message = this.messages[it];
+			const emptyIndex = this.messagesSet;
+			const elapsed = this.messagesTime - message.time;
+			if (elapsed < message.getDuration()) {
+				this.messagesSet += 1;
+				if (emptyIndex < it) {
+					this.messages[it] = this.messages[emptyIndex]; // move processed up
+					this.messages[emptyIndex] = message;           // move pending down
+				}
+			}
+		}
 
 		// finalize
-		if (done) this.messagesSet = 0;
 		if (this.messagesSet == 0)
 			this.messagesTime = 0;
 	}

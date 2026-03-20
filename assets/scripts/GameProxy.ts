@@ -4,8 +4,8 @@ export enum EventType {
 	None = 0,
 	Error,   // input issue
 	Init,    // start of the game
-	Spawn,   // created during gameplay
 	Damage,  // damaged by touch or chain reactions
+	Spawn,   // created during gameplay
 	Trail,   // left behind after a move
 	Moved,   // tile changed position
 };
