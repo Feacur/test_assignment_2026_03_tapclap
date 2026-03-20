@@ -1,3 +1,5 @@
+import { Utils } from "./Utils";
+
 export enum TileType {
 	None = 0,
 	Blue,
@@ -35,7 +37,7 @@ export abstract class TileGenerator {
 
 	public static generate(): TileType {
 		// @todo use seed
-		let rnd = Math.round(Math.random() * TileGenerator.weightsSum);
+		let rnd = Utils.randomRange(0, TileGenerator.weightsSum);
 		for (let type = 0; type < TileGenerator.weights.length; type++) {
 			rnd -= TileGenerator.weights[type];
 			if (rnd <= 0) return type;

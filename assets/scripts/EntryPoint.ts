@@ -8,6 +8,7 @@
 import { TileType } from "./Tile";
 import { BoostType, Game, GameSettings } from "./Game";
 import { TileEvent, GameProxy, StateEvent } from "./GameProxy";
+import { Utils } from "./Utils";
 
 const {ccclass, property} = cc._decorator;
 
@@ -140,13 +141,13 @@ export default class EntryPoint extends cc.Component {
 		this.gameProxy.waitForAnim = (): boolean => { return this.isAnimationBlocking(); }
 
 		// setup settings
-		this.settings.width      = Math.round(  3 +   6 * Math.random());
-		this.settings.height     = Math.round(  3 +   6 * Math.random());
-		this.settings.regenLimit = Math.round(  3 +   2 * Math.random());
-		this.settings.movesLimit = Math.round( 40 +  20 * Math.random());
-		this.settings.scoreLimit = Math.round(300 + 100 * Math.random());
-		this.settings.boostLimit[BoostType.Tele] = Math.round(4 + 4 * Math.random());
-		this.settings.boostLimit[BoostType.Bomb] = Math.round(2 + 2 * Math.random());
+		this.settings.width      =   3 + Utils.randomRange(0,   6);
+		this.settings.height     =   3 + Utils.randomRange(0,   6);
+		this.settings.regenLimit =   3 + Utils.randomRange(0,   2);
+		this.settings.movesLimit =  40 + Utils.randomRange(0,  20);
+		this.settings.scoreLimit = 300 + Utils.randomRange(0, 100);
+		this.settings.boostLimit[BoostType.Tele] = 4 + Utils.randomRange(0, 4);
+		this.settings.boostLimit[BoostType.Bomb] = 2 + Utils.randomRange(0, 2);
 	}
 
 	start(): void {
