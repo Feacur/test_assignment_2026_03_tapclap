@@ -56,6 +56,15 @@ export default class EntryPoint extends cc.Component {
 	@property(cc.Label)
 	score: cc.Label = null;
 
+	@property(cc.Layout)
+	grid: cc.Layout = null;
+
+	@property(cc.Prefab)
+	tilePrefab: cc.Prefab = null;
+
+	@property(cc.SpriteFrame)
+	tileSpriteFrames: cc.SpriteFrame[] = new Array(TileType.__COUNT__);
+
 	@property(cc.Button)
 	boosterTeleButton: cc.Button = null;
 
@@ -69,24 +78,15 @@ export default class EntryPoint extends cc.Component {
 	boosterBombLabel: cc.Label = null;
 
 	@property(cc.Button)
-	shuffleButton: cc.Button = null;
+	overlayShuffle: cc.Button = null;
 
 	@property(cc.Button)
-	gameOverButton: cc.Button = null;
+	overlayGameOver: cc.Button = null;
 
 	@property(cc.Button)
-	winButton: cc.Button = null;
+	overlayWin: cc.Button = null;
 
-	@property(cc.Layout)
-	grid: cc.Layout = null;
-
-	@property(cc.Prefab)
-	tilePrefab: cc.Prefab = null;
-
-	@property(cc.SpriteFrame)
-	tileSpriteFrames: cc.SpriteFrame[] = new Array(TileType.__COUNT__);
-
-	private tiles: cc.Node[] = [];
+	private tiles: cc.Sprite[] = [];
 
 	private gameProxy: GameProxy = new GameProxy();
 	private game: Game = new Game(this.gameProxy);
@@ -110,9 +110,9 @@ export default class EntryPoint extends cc.Component {
 		this.grid.node.on(cc.Node.EventType.TOUCH_START, this.onTouchStart, this, true);
 		this.boosterTeleButton.clickEvents.push(this.createEventHanler("boosterTeleOnClick"));
 		this.boosterBombButton.clickEvents.push(this.createEventHanler("boosterBomOnClick"));
-		this.shuffleButton.clickEvents.push(this.createEventHanler("shuffleOnClick"));
-		this.gameOverButton.clickEvents.push(this.createEventHanler("gameOverOnClick"));
-		this.winButton.clickEvents.push(this.createEventHanler("winOnClick"));
+		this.overlayShuffle.clickEvents.push(this.createEventHanler("shuffleOnClick"));
+		this.overlayGameOver.clickEvents.push(this.createEventHanler("gameOverOnClick"));
+		this.overlayWin.clickEvents.push(this.createEventHanler("winOnClick"));
 
 		// setup proxy
 		this.gameProxy.updateTile = (eventType: TileEvent,
@@ -198,13 +198,15 @@ export default class EntryPoint extends cc.Component {
 			for (let index = currentTilesCount; index < this.tiles.length; index++) {
 				const instance = cc.instantiate(this.tilePrefab);
 				instance.parent = this.grid.node;
-				this.tiles[index] = instance;
+
+				const sprite = instance.getComponent(cc.Sprite);
+				this.tiles[index] = sprite;
 			}
 		}
 
 		for (let index = 0; index < this.tiles.length; index++) {
 			const instance = this.tiles[index];
-			instance.active = index < boardTilesCount;
+			instance.node.active = index < boardTilesCount;
 		}
 
 		this.game.initialize(this.settings);
@@ -214,8 +216,7 @@ export default class EntryPoint extends cc.Component {
 		if (x >= 0 && x < this.settings.size.x && y >= 0 && y < this.settings.size.y) {
 			const index = this.getIndex(x, y);
 			const instance = this.tiles[index];
-			const sprite = instance.getComponent(cc.Sprite);
-			sprite.spriteFrame = this.tileSpriteFrames[type];
+			instance.spriteFrame = this.tileSpriteFrames[type];
 		}
 	}
 
@@ -228,9 +229,9 @@ export default class EntryPoint extends cc.Component {
 	}
 
 	private updateState(state: StateEvent): void {
-		this.shuffleButton.node.active = state == StateEvent.Stuck;
-		this.gameOverButton.node.active = state == StateEvent.GameOver;
-		this.winButton.node.active = state == StateEvent.Win;
+		this.overlayShuffle.node.active = state == StateEvent.Stuck;
+		this.overlayGameOver.node.active = state == StateEvent.GameOver;
+		this.overlayWin.node.active = state == StateEvent.Win;
 	}
 
 	// MESSAGING:
@@ -285,19 +286,19 @@ export default class EntryPoint extends cc.Component {
 				case TileEvent.Error: {
 					const amplitude = 20;
 					const frequency = Math.PI * 2;
-					instance.angle = amplitude * Math.sin(frequency * progress);
+					instance.node.angle = amplitude * Math.sin(frequency * progress);
 				} break;
 
 				case TileEvent.Initialize: {
-					instance.scale = 1;
+					instance.node.scale = 1;
 					const visualType = message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
-					this.setTileVisualPosition(instance, message.target.x, message.target.y);
+					this.setTileVisualPosition(instance.node, message.target.x, message.target.y);
 				} break;
 
 				case TileEvent.Shuffle: {
 					const pivotMoment = 0.5;
-					instance.scale = progress < pivotMoment
+					instance.node.scale = progress < pivotMoment
 						? 1 - cc.easing.backIn(progress / pivotMoment)
 						: cc.easing.elasticOut((progress - pivotMoment) / pivotMoment);
 					const visualType = progress < pivotMoment ? message.source.type : message.target.type;
@@ -306,13 +307,13 @@ export default class EntryPoint extends cc.Component {
 
 				case TileEvent.Damage: {
 					const pivotMoment = 0.8;
-					instance.scale = progress < pivotMoment ? 1 - cc.easing.backIn(progress) : 1;
+					instance.node.scale = progress < pivotMoment ? 1 - cc.easing.backIn(progress) : 1;
 					const visualType = progress < pivotMoment ? message.source.type : message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
 				case TileEvent.Spawn: {
-					instance.scale = cc.easing.circIn(progress);
+					instance.node.scale = cc.easing.circIn(progress);
 					const visualType = message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
@@ -329,7 +330,7 @@ export default class EntryPoint extends cc.Component {
 					// @todo bounce when an obstacle reached
 					const visualX = cc.misc.lerp(message.source.x, message.target.x, progress);
 					const visualY = cc.misc.lerp(message.source.y, message.target.y, progress);
-					this.setTileVisualPosition(instance, visualX, visualY);
+					this.setTileVisualPosition(instance.node, visualX, visualY);
 				} break;
 			}
 		}

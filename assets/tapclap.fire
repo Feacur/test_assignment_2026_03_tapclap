@@ -256,7 +256,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "img_bg_game",
+    "_name": "background",
     "_objFlags": 0,
     "_parent": {
       "__id__": 2
@@ -452,7 +452,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "bg_moves",
+    "_name": "moves area",
     "_objFlags": 0,
     "_parent": {
       "__id__": 8
@@ -521,7 +521,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "text",
+    "_name": "moves text",
     "_objFlags": 0,
     "_parent": {
       "__id__": 9
@@ -677,7 +677,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "slot_frame_moves",
+    "_name": "score area",
     "_objFlags": 0,
     "_parent": {
       "__id__": 8
@@ -1096,7 +1096,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "grid",
+    "_name": "game grid",
     "_objFlags": 0,
     "_parent": {
       "__id__": 2
@@ -1454,7 +1454,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "booster 1",
+    "_name": "booster tele",
     "_objFlags": 0,
     "_parent": {
       "__id__": 31
@@ -1620,7 +1620,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "counter",
+    "_name": "counter area",
     "_objFlags": 0,
     "_parent": {
       "__id__": 32
@@ -1689,7 +1689,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "text",
+    "_name": "booster counter text",
     "_objFlags": 0,
     "_parent": {
       "__id__": 35
@@ -1947,7 +1947,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "booster 2",
+    "_name": "booster bomb",
     "_objFlags": 0,
     "_parent": {
       "__id__": 31
@@ -2113,7 +2113,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "counter",
+    "_name": "counter area",
     "_objFlags": 0,
     "_parent": {
       "__id__": 42
@@ -2182,7 +2182,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "text",
+    "_name": "booster counter text",
     "_objFlags": 0,
     "_parent": {
       "__id__": 45
@@ -2499,7 +2499,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "shuffle",
+    "_name": "overlay shuffle",
     "_objFlags": 0,
     "_parent": {
       "__id__": 2
@@ -2762,7 +2762,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "game over",
+    "_name": "overlay game over",
     "_objFlags": 0,
     "_parent": {
       "__id__": 2
@@ -3025,7 +3025,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "win",
+    "_name": "overlay win",
     "_objFlags": 0,
     "_parent": {
       "__id__": 2
@@ -3117,7 +3117,7 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 1970.24,
+      "width": 1847.68,
       "height": 403.2
     },
     "_anchorPoint": {
@@ -3406,27 +3406,6 @@
     "score": {
       "__id__": 18
     },
-    "boosterTeleButton": {
-      "__id__": 41
-    },
-    "boosterTeleLabel": {
-      "__id__": 37
-    },
-    "boosterBombButton": {
-      "__id__": 51
-    },
-    "boosterBombLabel": {
-      "__id__": 47
-    },
-    "shuffleButton": {
-      "__id__": 58
-    },
-    "gameOverButton": {
-      "__id__": 63
-    },
-    "winButton": {
-      "__id__": 68
-    },
     "grid": {
       "__id__": 26
     },
@@ -3463,6 +3442,27 @@
         "__uuid__": "ded2170a-0d4a-49cc-84a7-863a4af060e2"
       }
     ],
+    "boosterTeleButton": {
+      "__id__": 41
+    },
+    "boosterTeleLabel": {
+      "__id__": 37
+    },
+    "boosterBombButton": {
+      "__id__": 51
+    },
+    "boosterBombLabel": {
+      "__id__": 47
+    },
+    "overlayShuffle": {
+      "__id__": 58
+    },
+    "overlayGameOver": {
+      "__id__": 63
+    },
+    "overlayWin": {
+      "__id__": 68
+    },
     "_id": "f27B3xPwxDQ6YrPV8VqgXn"
   }
 ]
