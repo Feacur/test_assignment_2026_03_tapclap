@@ -6,7 +6,7 @@
 //  - https://docs.cocos.com/creator/2.4/manual/en/scripting/life-cycle-s.html
 
 import { TileType } from "./Tile";
-import { Game } from "./Game";
+import { Game, GameSettings } from "./Game";
 import { TileEvent, GameProxy, StateEvent } from "./GameProxy";
 
 const {ccclass, property} = cc._decorator;
@@ -72,6 +72,9 @@ export default class EntryPoint extends cc.Component {
 	@property(cc.Button)
 	gameOverButton: cc.Button = null;
 
+	@property(cc.Button)
+	winButton: cc.Button = null;
+
 	@property(cc.Layout)
 	grid: cc.Layout = null;
 
@@ -81,15 +84,11 @@ export default class EntryPoint extends cc.Component {
 	@property(cc.SpriteFrame)
 	tileSpriteFrames: cc.SpriteFrame[] = new Array(TileType.__COUNT__);
 
-	@property(cc.Vec2)
-	gridSize: cc.Vec2 = new cc.Vec2(5, 5);
+	private tiles: cc.Node[] = [];
 
-	@property(cc.Integer)
-	shufflesLimit: number = 3;
-
-	private gameProxy: GameProxy = null;
-	private tiles: cc.Node[] = null;
-	private game: Game = null;
+	private gameProxy: GameProxy = new GameProxy();
+	private game: Game = new Game(this.gameProxy);
+	private settings: GameSettings = new GameSettings();
 
 	private messages: Message[] = []
 	private messagesSet: number = 0; // @note reuse message instances
@@ -98,25 +97,22 @@ export default class EntryPoint extends cc.Component {
 	// LIFE-CYCLE:
 
 	onLoad(): void {
-		this.grid.node.on(cc.Node.EventType.TOUCH_START, this.onTouchStart, this, true);
-
-		this.boosterTeleButton.clickEvents.push(this.createEventHanler("boosterTeleOnClick"));
-		this.boosterBombButton.clickEvents.push(this.createEventHanler("boosterBomOnClick"));
-		this.shuffleButton.clickEvents.push(this.createEventHanler("shuffleOnClick"));
-		this.gameOverButton.clickEvents.push(this.createEventHanler("gameOverOnClick"));
-
+		// sanity check sprites
 		this.grid.enabled = false;
 		if (this.tileSpriteFrames.length != TileType.__COUNT__) {
 			this.tileSpriteFrames.length = TileType.__COUNT__;
 			console.log("[warn] `tileSpriteFrames` length reset to %d", TileType.__COUNT__);
 		}
 
-		this.gridSize.x = Math.floor(this.gridSize.x);
-		this.gridSize.y = Math.floor(this.gridSize.y);
-		if (this.gridSize.x > 9) this.gridSize.x = 9;
-		if (this.gridSize.y > 9) this.gridSize.y = 9;
+		// setup input
+		this.grid.node.on(cc.Node.EventType.TOUCH_START, this.onTouchStart, this, true);
+		this.boosterTeleButton.clickEvents.push(this.createEventHanler("boosterTeleOnClick"));
+		this.boosterBombButton.clickEvents.push(this.createEventHanler("boosterBomOnClick"));
+		this.shuffleButton.clickEvents.push(this.createEventHanler("shuffleOnClick"));
+		this.gameOverButton.clickEvents.push(this.createEventHanler("gameOverOnClick"));
+		this.winButton.clickEvents.push(this.createEventHanler("winOnClick"));
 
-		this.gameProxy = new GameProxy();
+		// setup proxy
 		this.gameProxy.updateTile = (eventType: TileEvent,
 			sourceX: number, sourceY: number, sourceType: TileType,
 			targetX: number, targetY: number, targetType: TileType
@@ -131,11 +127,16 @@ export default class EntryPoint extends cc.Component {
 		this.gameProxy.updateScore = (value: number): void => { this.updateScore(value); }
 		this.gameProxy.updateState = (value: StateEvent): void => { this.updateState(value); }
 		this.gameProxy.waitForAnim = (): boolean => { return this.isAnimationBlocking(); }
+
+		// setup settings
+		this.settings.size.x = 9;
+		this.settings.size.y = 9;
+		this.settings.regenLimit = 3;
+		this.settings.movesLimit = 30;
+		this.settings.scoreLimit = 300;
 	}
 
 	start(): void {
-		this.grid.node.width = this.gridSize.x * this.getCellWidth() + (this.grid.paddingLeft + this.grid.paddingRight);
-		this.grid.node.height = this.gridSize.y * this.getCellHeight() + (this.grid.paddingBottom + this.grid.paddingTop);
 		this.initializeGame();
 	}
 
@@ -158,7 +159,7 @@ export default class EntryPoint extends cc.Component {
 		const baseY = this.grid.node.parent.position.y + this.grid.node.position.y + this.grid.paddingBottom;
 		const x = Math.floor((pos.x - baseX) / this.getCellWidth());
 		const y = Math.floor((pos.y - baseY) / this.getCellHeight());
-		if (x >= 0 && x < this.gridSize.x && y >= 0 && y < this.gridSize.y)
+		if (x >= 0 && x < this.settings.size.x && y >= 0 && y < this.settings.size.y)
 			this.game.inputTouchTile(x, y);
 	}
 
@@ -175,22 +176,36 @@ export default class EntryPoint extends cc.Component {
 	}
 	
 	private gameOverOnClick (event: Event, customEventData: string): void {
-		this.game.initialize();
+		this.initializeGame();
+	}
+	
+	private winOnClick (event: Event, customEventData: string): void {
+		this.initializeGame();
 	}
 
 	// LOGIC:
 
 	private initializeGame (): void {
-		// @todo reuse tiles on reinit or at least despawn them
-		this.tiles = new Array(this.gridSize.x * this.gridSize.y);
-		for (let index = 0; index < this.tiles.length; index++) {
-			const instance = cc.instantiate(this.tilePrefab);
-			instance.parent = this.grid.node;
-			this.tiles[index] = instance;
+		this.grid.node.width = this.settings.size.x * this.getCellWidth() + (this.grid.paddingLeft + this.grid.paddingRight);
+		this.grid.node.height = this.settings.size.y * this.getCellHeight() + (this.grid.paddingBottom + this.grid.paddingTop);
+
+		const boardTilesCount = this.settings.size.x * this.settings.size.y;
+		if (this.tiles.length < boardTilesCount) {
+			const currentTilesCount = this.tiles.length;
+			this.tiles.length = boardTilesCount;
+			for (let index = currentTilesCount; index < this.tiles.length; index++) {
+				const instance = cc.instantiate(this.tilePrefab);
+				instance.parent = this.grid.node;
+				this.tiles[index] = instance;
+			}
 		}
 
-		this.game = new Game(this.gridSize, this.shufflesLimit, this.gameProxy);
-		this.game.initialize();
+		for (let index = 0; index < this.tiles.length; index++) {
+			const instance = this.tiles[index];
+			instance.active = index < boardTilesCount;
+		}
+
+		this.game.initialize(this.settings);
 	}
 
 	private setTileVisualPosition (instance: cc.Node, x: number, y: number): void {
@@ -201,7 +216,7 @@ export default class EntryPoint extends cc.Component {
 	}
 
 	private updateTile (x: number, y: number, type: TileType): void {
-		if (x >= 0 && x < this.gridSize.x && y >= 0 && y < this.gridSize.y) {
+		if (x >= 0 && x < this.settings.size.x && y >= 0 && y < this.settings.size.y) {
 			const index = this.getIndex(x, y);
 			const instance = this.tiles[index];
 			const sprite = instance.getComponent(cc.Sprite);
@@ -220,12 +235,13 @@ export default class EntryPoint extends cc.Component {
 	private updateState(state: StateEvent): void {
 		this.shuffleButton.node.active = state == StateEvent.Stuck;
 		this.gameOverButton.node.active = state == StateEvent.GameOver;
+		this.winButton.node.active = state == StateEvent.Win;
 	}
 
 	// HELPERS:
 
 	private getIndex(x: number, y: number) {
-		return y * this.gridSize.x + x;
+		return y * this.settings.size.x + x;
 	}
 
 	private getCellWidth(): number {

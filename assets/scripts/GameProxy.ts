@@ -15,6 +15,7 @@ export enum StateEvent {
 	None = 0,
 	Stuck,
 	GameOver,
+	Win,
 };
 
 interface TileDelegate {
