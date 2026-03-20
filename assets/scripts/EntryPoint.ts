@@ -24,14 +24,16 @@ class Message {
 	target: Tile = new Tile();
 
 	getDuration(): number {
+		// @note Spawn, Trail, Moved are better being in sync
+		// and at least move should be the longest of these three
 		switch (this.tileEvent) {
-			case TileEvent.Shuffle: return 2;
-			case TileEvent.Error:   return 0.1;
-			case TileEvent.Damage:  return 0.4;
-			// @note Spawn, Trail, Moved are better being in sync
-			case TileEvent.Spawn:   return 0.1;
-			case TileEvent.Trail:   return 0.1;
-			case TileEvent.Moved:   return 0.1;
+			case TileEvent.Initialize: return 0;
+			case TileEvent.Shuffle:    return 2;
+			case TileEvent.Error:      return 0.1;
+			case TileEvent.Damage:     return 0.4;
+			case TileEvent.Spawn:      return 0.1;
+			case TileEvent.Trail:      return 0.1;
+			case TileEvent.Moved:      return 0.1;
 		}
 		return 0;
 	}

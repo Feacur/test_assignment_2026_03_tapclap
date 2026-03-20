@@ -383,15 +383,13 @@ export class Game {
 
 		this.regen += 1;
 		for (let index = 0; index < this.tiles.length; index++) {
-			const type = TileGenerator.generate();
-			this.tiles[index] = type;
+			const sourceType = this.tiles[index];
+			const regenType = TileGenerator.generate();
+			this.tiles[index] = regenType;
+			if (this.proxy != null)
+				this.proxyUpdateTile(eventType, index, sourceType, index, regenType);
 		}
 
-		if (this.proxy != null)
-			for (let index = 0; index < this.tiles.length; index++) {
-				const type = this.tiles[index];
-				this.proxyUpdateTile(eventType, index, type, index, type);
-			}
 	}
 
 	private getIndex(x: number, y: number): number {
