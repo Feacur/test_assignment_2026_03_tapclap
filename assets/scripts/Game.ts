@@ -1,5 +1,5 @@
 import { TileType, TileGenerator, TileUtils, TileValue } from "./Tile"
-import { EventType, GameProxy } from "./GameProxy";
+import { TileEvent, GameProxy, StateEvent } from "./GameProxy";
 
 enum GameState {
 	None = 0,
@@ -7,6 +7,7 @@ enum GameState {
 	InputQueue,
 	ProcessQueue,
 	Animate,
+	Stuck,
 	GameOver,
 }
 
@@ -40,11 +41,22 @@ export class Game {
 	// API:
 
 	initialize(): void {
+		this.generation = 0;
 		this.state = GameState.None;
 		this.regenerateTiles();
 		if (this.proxy != null) {
 			this.proxy.updateMoves(this.moves);
 			this.proxy.updateScore(this.score);
+			this.proxy.updateState(StateEvent.None);
+		}
+	}
+
+	inputShuffle(): void {
+		if (this.state == GameState.Stuck) {
+			this.regenerateTiles();
+			if (this.proxy != null)
+				this.proxy.updateState(StateEvent.None);
+			this.state = GameState.Animate;
 		}
 	}
 
@@ -56,7 +68,7 @@ export class Game {
 				this.queue.length = 0; // @note only a single tile can be triggered by input
 				this.queue.push(index);
 			}
-			else this.proxyUpdateTile(EventType.Error, index, type, index, type);
+			else this.proxyUpdateTile(TileEvent.Error, index, type, index, type);
 		}
 	}
 
@@ -69,11 +81,21 @@ export class Game {
 				case GameState.InputQueue:   this.doStateInputQueue();   break;
 				case GameState.ProcessQueue: this.doStateProcessQueue(); break;
 				case GameState.Animate:      this.doStateAnimate();      break;
-				case GameState.GameOver:     /*idle*/                    break;
+				// case GameState.Stuck:        /*idle*/                    break;
+				// case GameState.GameOver:     /*idle*/                    break;
 			}
+
 			// @note waiting for input or animating, but processing
 			// can be spread thin over a few frames too as an optimization
 			if (previousState == this.state) break;
+
+			if (this.proxy != null) {
+				switch (this.state) {
+					case GameState.None:     this.proxy.updateState(StateEvent.None);     break;
+					case GameState.Stuck:    this.proxy.updateState(StateEvent.Stuck);    break;
+					case GameState.GameOver: this.proxy.updateState(StateEvent.GameOver); break;
+				}
+			}
 		}
 	}
 
@@ -84,14 +106,12 @@ export class Game {
 		this.queueIndex = 0;
 
 		const preprocessResult = this.preprocessBoard();
-		if (!preprocessResult) {
-			if (this.generation <= this.generationsLimit) {
-				this.regenerateTiles();
-				this.state = GameState.Animate;
-			}
-			else this.state = GameState.GameOver;
-		}
-		else this.state = GameState.ProcessBoard
+		this.state = preprocessResult
+			? GameState.ProcessBoard
+			: this.generation <= this.generationsLimit
+				? GameState.Stuck
+				: GameState.GameOver
+			;
 	}
 
 	private doStateProcessBoard(): void { // @note can be time sliced
@@ -107,8 +127,8 @@ export class Game {
 				this.tiles[targetIdx] = sourceType;
 				change = true;
 				if (this.proxy != null) {
-					this.proxyUpdateTile(EventType.Trail, sourceIdx, sourceType, sourceIdx, trailType);
-					this.proxyUpdateTile(EventType.Moved, sourceIdx, targetType, targetIdx, sourceType);
+					this.proxyUpdateTile(TileEvent.Trail, sourceIdx, sourceType, sourceIdx, trailType);
+					this.proxyUpdateTile(TileEvent.Moved, sourceIdx, targetType, targetIdx, sourceType);
 				}
 			}
 		}
@@ -120,7 +140,7 @@ export class Game {
 				this.tiles[index] = spawnType;
 				change = true;
 				if (this.proxy != null)
-					this.proxyUpdateTile(EventType.Spawn, index, type, index, spawnType);
+					this.proxyUpdateTile(TileEvent.Spawn, index, type, index, spawnType);
 			}
 		}
 
@@ -144,7 +164,7 @@ export class Game {
 			if (this.proxy != null) {
 				let index = this.queue[0];
 				const type = this.tiles[index];
-				this.proxyUpdateTile(EventType.Error, index, type, index, type);
+				this.proxyUpdateTile(TileEvent.Error, index, type, index, type);
 			}
 			this.state = GameState.Animate;
 		}
@@ -167,7 +187,7 @@ export class Game {
 				this.tiles[index] = damagedType;
 
 				if (this.proxy != null)
-					this.proxyUpdateTile(EventType.Damage, index, type, index, damagedType);
+					this.proxyUpdateTile(TileEvent.Damage, index, type, index, damagedType);
 			}
 
 			const dmgeRadius = TileUtils.getDamageRadius(type);
@@ -329,8 +349,8 @@ export class Game {
 
 	regenerateTiles(): void {
 		const eventType = this.generation == 0
-			? EventType.Initialize
-			: EventType.Shuffle;
+			? TileEvent.Initialize
+			: TileEvent.Shuffle;
 
 		this.generation += 1;
 		for (let index = 0; index < this.tiles.length; index++) {
@@ -338,12 +358,11 @@ export class Game {
 			this.tiles[index] = type;
 		}
 
-		if (this.proxy != null) {
+		if (this.proxy != null)
 			for (let index = 0; index < this.tiles.length; index++) {
 				const type = this.tiles[index];
 				this.proxyUpdateTile(eventType, index, type, index, type);
 			}
-		}
 	}
 
 	private getIndex(x: number, y: number): number {
@@ -367,7 +386,7 @@ export class Game {
 			this.skips[i] = false;
 	}
 
-	private proxyUpdateTile(eventType: EventType,
+	private proxyUpdateTile(eventType: TileEvent,
 		sourceIndex: number, sourceType: TileType,
 		targetIndex: number, targetType: TileType
 	): void {

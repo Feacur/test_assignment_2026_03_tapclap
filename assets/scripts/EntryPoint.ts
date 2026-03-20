@@ -7,7 +7,7 @@
 
 import { TileType } from "./Tile";
 import { Game } from "./Game";
-import { EventType, GameProxy } from "./GameProxy";
+import { TileEvent, GameProxy, StateEvent } from "./GameProxy";
 
 const {ccclass, property} = cc._decorator;
 
@@ -19,27 +19,27 @@ class Tile {
 
 class Message {
 	time: number;
-	eventType: EventType;
+	tileEvent: TileEvent;
 	source: Tile = new Tile();
 	target: Tile = new Tile();
 
 	getDuration(): number {
-		switch (this.eventType) {
-			case EventType.Shuffle: return 2;
-			case EventType.Error:   return 0.1;
-			case EventType.Damage:  return 0.4;
+		switch (this.tileEvent) {
+			case TileEvent.Shuffle: return 2;
+			case TileEvent.Error:   return 0.1;
+			case TileEvent.Damage:  return 0.4;
 			// @note Spawn, Trail, Moved are better being in sync
-			case EventType.Spawn:   return 0.1;
-			case EventType.Trail:   return 0.1;
-			case EventType.Moved:   return 0.1;
+			case TileEvent.Spawn:   return 0.1;
+			case TileEvent.Trail:   return 0.1;
+			case TileEvent.Moved:   return 0.1;
 		}
 		return 0;
 	}
 
 	isBlocking(): boolean {
-		switch (this.eventType) {
-			case EventType.None:  return false;
-			case EventType.Error: return false;
+		switch (this.tileEvent) {
+			case TileEvent.None:  return false;
+			case TileEvent.Error: return false;
 		}
 		return true;
 	}
@@ -66,6 +66,12 @@ export default class EntryPoint extends cc.Component {
 	@property(cc.Label)
 	boosterBombLabel: cc.Label = null;
 
+	@property(cc.Button)
+	shuffleButton: cc.Button = null;
+
+	@property(cc.Button)
+	gameOverButton: cc.Button = null;
+
 	@property(cc.Layout)
 	grid: cc.Layout = null;
 
@@ -78,7 +84,7 @@ export default class EntryPoint extends cc.Component {
 	@property(cc.Vec2)
 	gridSize: cc.Vec2 = new cc.Vec2(5, 5);
 
-	@property(Number)
+	@property(cc.Integer)
 	shufflesLimit: number = 3;
 
 	private gameProxy: GameProxy = null;
@@ -94,17 +100,10 @@ export default class EntryPoint extends cc.Component {
 	onLoad(): void {
 		this.grid.node.on(cc.Node.EventType.TOUCH_START, this.onTouchStart, this, true);
 
-		const boosterTeleEventHandler = new cc.Component.EventHandler();
-		boosterTeleEventHandler.target = this.node;
-		boosterTeleEventHandler.component = EntryPoint.name;
-		boosterTeleEventHandler.handler = "boosterTeleOnClick";
-		this.boosterTeleButton.clickEvents.push(boosterTeleEventHandler);
-
-		const boosterBombEventHandler = new cc.Component.EventHandler();
-		boosterBombEventHandler.target = this.node;
-		boosterBombEventHandler.component = EntryPoint.name;
-		boosterBombEventHandler.handler = "boosterBombOnClick";
-		this.boosterBombButton.clickEvents.push(boosterBombEventHandler);
+		this.boosterTeleButton.clickEvents.push(this.createEventHanler("boosterTeleOnClick"));
+		this.boosterBombButton.clickEvents.push(this.createEventHanler("boosterBomOnClick"));
+		this.shuffleButton.clickEvents.push(this.createEventHanler("shuffleOnClick"));
+		this.gameOverButton.clickEvents.push(this.createEventHanler("gameOverOnClick"));
 
 		this.grid.enabled = false;
 		if (this.tileSpriteFrames.length != TileType.__COUNT__) {
@@ -118,7 +117,7 @@ export default class EntryPoint extends cc.Component {
 		if (this.gridSize.y > 9) this.gridSize.y = 9;
 
 		this.gameProxy = new GameProxy();
-		this.gameProxy.updateTile = (eventType: EventType,
+		this.gameProxy.updateTile = (eventType: TileEvent,
 			sourceX: number, sourceY: number, sourceType: TileType,
 			targetX: number, targetY: number, targetType: TileType
 		) => {
@@ -130,6 +129,7 @@ export default class EntryPoint extends cc.Component {
 		}
 		this.gameProxy.updateMoves = (value: number): void => { this.updateMoves(value); }
 		this.gameProxy.updateScore = (value: number): void => { this.updateScore(value); }
+		this.gameProxy.updateState = (value: StateEvent): void => { this.updateState(value); }
 		this.gameProxy.waitForAnim = (): boolean => { return this.isAnimationBlocking(); }
 	}
 
@@ -168,6 +168,14 @@ export default class EntryPoint extends cc.Component {
 	
 	private boosterBombOnClick (event: Event, customEventData: string): void {
 		console.log("clicked booster bomb");
+	}
+	
+	private shuffleOnClick (event: Event, customEventData: string): void {
+		this.game.inputShuffle();
+	}
+	
+	private gameOverOnClick (event: Event, customEventData: string): void {
+		this.game.initialize();
 	}
 
 	// LOGIC:
@@ -209,6 +217,11 @@ export default class EntryPoint extends cc.Component {
 		this.score.string = score.toString();
 	}
 
+	private updateState(state: StateEvent): void {
+		this.shuffleButton.node.active = state == StateEvent.Stuck;
+		this.gameOverButton.node.active = state == StateEvent.GameOver;
+	}
+
 	// HELPERS:
 
 	private getIndex(x: number, y: number) {
@@ -241,7 +254,7 @@ export default class EntryPoint extends cc.Component {
 		return false;
 	}
 
-	private pushMessage(eventType: EventType,
+	private pushMessage(tileEvent: TileEvent,
 		sourceX: number, sourceY: number, sourceType: TileType,
 		targetX: number, targetY: number, targetType: TileType
 	) { // @note messages array can be prepopulated, OTOH it's not a bottleneck anyway
@@ -252,7 +265,7 @@ export default class EntryPoint extends cc.Component {
 		this.messagesSet += 1;
 
 		message.time = this.messagesTime;
-		message.eventType = eventType;
+		message.tileEvent = tileEvent;
 
 		message.source.x    = sourceX;
 		message.source.y    = sourceY;
@@ -277,21 +290,21 @@ export default class EntryPoint extends cc.Component {
 			const elapsed = this.messagesTime - message.time;
 			const progress = duration > 0 ? Math.min(elapsed / duration, 1) : 1;
 
-			switch (message.eventType) {
-				case EventType.Error: {
+			switch (message.tileEvent) {
+				case TileEvent.Error: {
 					const amplitude = 20;
 					const frequency = Math.PI * 2;
-					instance.rotation = amplitude * Math.sin(frequency * progress);
+					instance.angle = amplitude * Math.sin(frequency * progress);
 				} break;
 
-				case EventType.Initialize: {
+				case TileEvent.Initialize: {
 					instance.scale = 1;
 					const visualType = message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 					this.setTileVisualPosition(instance, message.target.x, message.target.y);
 				} break;
 
-				case EventType.Shuffle: {
+				case TileEvent.Shuffle: {
 					const pivotMoment = 0.5;
 					instance.scale = progress < pivotMoment
 						? 1 - cc.easing.backIn(progress / pivotMoment)
@@ -300,31 +313,31 @@ export default class EntryPoint extends cc.Component {
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
-				case EventType.Damage: {
+				case TileEvent.Damage: {
 					const pivotMoment = 0.8;
 					instance.scale = progress < pivotMoment ? 1 - cc.easing.backIn(progress) : 1;
 					const visualType = progress < pivotMoment ? message.source.type : message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
-				case EventType.Spawn: {
+				case TileEvent.Spawn: {
 					instance.scale = cc.easing.circIn(progress);
 					const visualType = message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
-				case EventType.Trail: {
+				case TileEvent.Trail: {
 					const visualType = message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
-				case EventType.Moved: {
+				case TileEvent.Moved: {
 					const visualType = message.target.type;
 					this.updateTile(message.target.x, message.target.y, visualType);
 
 					// @todo bounce when an obstacle reached
-					const visualX = cc.lerp(message.source.x, message.target.x, progress);
-					const visualY = cc.lerp(message.source.y, message.target.y, progress);
+					const visualX = cc.misc.lerp(message.source.x, message.target.x, progress);
+					const visualY = cc.misc.lerp(message.source.y, message.target.y, progress);
 					this.setTileVisualPosition(instance, visualX, visualY);
 				} break;
 			}
@@ -349,5 +362,13 @@ export default class EntryPoint extends cc.Component {
 		// finalize
 		if (this.messagesSet == 0)
 			this.messagesTime = 0;
+	}
+
+	private createEventHanler(handler: string): cc.Component.EventHandler {
+		const ret = new cc.Component.EventHandler();
+		ret.target = this.node;
+		ret.component = EntryPoint.name;
+		ret.handler = handler;
+		return ret;
 	}
 }
