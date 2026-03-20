@@ -1,8 +1,9 @@
-import { TileType, TileGenerator, TileUtils, TileValue } from "./Tile"
-import { TileEvent, GameProxy, StateEvent } from "./GameProxy";
+import { TileType, TileGenerator, TileValue, TileUtils } from "./Tile"
+import { GameProxy, TileEvent, StateEvent } from "./GameProxy";
+import { BoostType } from "./Boost";
 
 enum GameState {
-	None = 0,
+	None = 0, // means "neutral state", but might be better to create and use an official one
 	ProcessBoard,
 	InputQueue,
 	ProcessQueue,
@@ -10,13 +11,6 @@ enum GameState {
 	Stuck,
 	Lost,
 	Won,
-}
-
-export enum BoostType {
-	None = 0,
-	Tele,
-	Bomb,
-	__COUNT__,
 }
 
 export class GameSettings {
@@ -28,6 +22,8 @@ export class GameSettings {
 	boostLimit: number[] = new Array(BoostType.__COUNT__);
 
 	set(other: GameSettings): void {
+		// @note use this instead of assignment to copy values
+		// and keep the original reference intact
 		this.width = other.width;
 		this.height = other.height;
 		this.regenLimit = other.regenLimit;
@@ -102,9 +98,7 @@ export class Game {
 	}
 
 	inputTouchTile(x: number, y: number): boolean {
-		if (x < 0 || x >= this.settings.width || y < 0 || y >= this.settings.height)
-			return false; // OOB
-
+		if (!this.checkInBounds(x, y)) return false;
 		const index = this.getIndex(x, y);
 		const type = this.tiles[index];
 
@@ -123,11 +117,8 @@ export class Game {
 		sourceX: number, sourceY: number,
 		targetX: number, targetY: number
 	): boolean {
-		if (sourceX < 0 || sourceX >= this.settings.width || sourceY < 0 || sourceY >= this.settings.height)
-			return false; // OOB
-		if (targetX < 0 || targetX >= this.settings.width || targetY < 0 || targetY >= this.settings.height)
-			return false; // OOB
-
+		if (!this.checkInBounds(sourceX, sourceY)) return false;
+		if (!this.checkInBounds(targetX, targetY)) return false;
 		const available = this.getAvailableBoosts(type);
 		if (available <= 0) return false;
 
@@ -241,6 +232,7 @@ export class Game {
 		let change = false;
 
 		for (let sourceIdx = this.settings.width; sourceIdx < this.tiles.length; sourceIdx++) {
+			// @note element `1` tile below is `width` tiles earlier in the array
 			const targetIdx = sourceIdx  - this.settings.width;
 			const targetType = this.tiles[targetIdx];
 			const sourceType = this.tiles[sourceIdx];
@@ -463,18 +455,22 @@ export class Game {
 	// HELPERS:
 
 	private getIndex(x: number, y: number): number {
+		// @idea reserve item `0` as a "valid" nil ?
 		return y * this.settings.width + x;
+	}
+
+	private checkInBounds(x: number, y: number): boolean {
+		if (x <  0)                    return false;
+		if (y <  0)                    return false;
+		if (x >= this.settings.width)  return false;
+		if (y >= this.settings.height) return false;
+		return true;
 	}
 
 	private getOffsetIndex(center: number, xOffset: number, yOffset: number): number {
 		const x = (center % this.settings.width)           + xOffset;
 		const y = Math.floor(center / this.settings.width) + yOffset;
-
-		if (x <  0)           return -1;
-		if (x >= this.settings.width) return -1;
-		if (y <  0)           return -1;
-		if (y >= this.settings.height) return -1;
-
+		if (!this.checkInBounds(x, y)) return -1;
 		return this.getIndex(x, y);
 	}
 
@@ -499,3 +495,5 @@ export class Game {
 		);
 	}
 }
+export { BoostType };
+

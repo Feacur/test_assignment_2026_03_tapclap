@@ -1,5 +1,5 @@
-import { BoostType } from "./Game";
 import { TileType } from "./Tile";
+import { BoostType } from "./Boost";
 
 export enum TileEvent {
 	None = 0,
@@ -9,11 +9,11 @@ export enum TileEvent {
 	Spawn,        // created during gameplay
 	Trail,        // left behind after a move
 	Moved,        // tile changed position
-	NonGameTouch, // just being responsive
+	Touch,        // just being responsive
 };
 
 export enum StateEvent {
-	None = 0,
+	None = 0, // means "normal state", but might be better to create and use an official one
 	Stuck,
 	Lost,
 	Won,

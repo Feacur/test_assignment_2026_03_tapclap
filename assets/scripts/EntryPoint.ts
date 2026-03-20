@@ -6,8 +6,9 @@
 //  - https://docs.cocos.com/creator/2.4/manual/en/scripting/life-cycle-s.html
 
 import { TileType } from "./Tile";
-import { BoostType, Game, GameSettings } from "./Game";
-import { TileEvent, GameProxy, StateEvent } from "./GameProxy";
+import { Game, GameSettings } from "./Game";
+import { GameProxy, TileEvent, StateEvent } from "./GameProxy";
+import { BoostType } from "./Boost";
 import { Utils } from "./Utils";
 
 const {ccclass, property} = cc._decorator;
@@ -36,11 +37,11 @@ class Message {
 		switch (this.tileEvent) {
 			case TileEvent.Initialize: return 0;
 			case TileEvent.Shuffle:    return 2;
-			case TileEvent.NonGameTouch:      return 0.1;
 			case TileEvent.Damage:     return 0.4;
 			case TileEvent.Spawn:      return 0.1;
 			case TileEvent.Trail:      return 0.1;
 			case TileEvent.Moved:      return 0.1;
+			case TileEvent.Touch:      return 0.1;
 		}
 		return 0;
 	}
@@ -48,7 +49,7 @@ class Message {
 	isBlocking(): boolean {
 		switch (this.tileEvent) {
 			case TileEvent.None:  return false;
-			case TileEvent.NonGameTouch: return false;
+			case TileEvent.Touch: return false;
 		}
 		return true;
 	}
@@ -173,9 +174,7 @@ export default class EntryPoint extends cc.Component {
 		const baseY = this.grid.node.parent.position.y + this.grid.node.position.y + this.grid.paddingBottom;
 		const x = Math.floor((pos.x - baseX) / this.getCellWidth());
 		const y = Math.floor((pos.y - baseY) / this.getCellHeight());
-
-		if (x < 0 || x >= this.settings.width || y < 0 || y >= this.settings.height)
-			return; // OOB
+		if (!this.checkInBounds(x, y)) return
 
 		this.pushMessageTouch(x, y);
 
@@ -252,11 +251,10 @@ export default class EntryPoint extends cc.Component {
 	}
 
 	private updateTile (x: number, y: number, type: TileType): void {
-		if (x >= 0 && x < this.settings.width && y >= 0 && y < this.settings.height) {
-			const index = this.getIndex(x, y);
-			const instance = this.tiles[index];
-			instance.spriteFrame = this.tileSpriteFrames[type];
-		}
+		if (!this.checkInBounds(x, y)) return;
+		const index = this.getIndex(x, y);
+		const instance = this.tiles[index];
+		instance.spriteFrame = this.tileSpriteFrames[type];
 	}
 
 	private updateMoves(current: number, limit: number): void {
@@ -316,7 +314,7 @@ export default class EntryPoint extends cc.Component {
 
 	private pushMessageTouch(x: number, y: number) {
 		const type: TileType = undefined; // @note don't care, touch event shouldn't affect sprite frame
-		this.pushMessage(TileEvent.NonGameTouch, x, y, type, x, y, type);
+		this.pushMessage(TileEvent.Touch, x, y, type, x, y, type);
 	}
 	
 	private processMessages(dt: number): void {
@@ -334,7 +332,7 @@ export default class EntryPoint extends cc.Component {
 			const progress = duration > 0 ? Math.min(elapsed / duration, 1) : 1;
 
 			switch (message.tileEvent) {
-				case TileEvent.NonGameTouch: {
+				case TileEvent.Touch: {
 					const amplitude = 20;
 					const frequency = Math.PI * 2;
 					instance.node.angle = amplitude * Math.sin(frequency * progress);
@@ -410,7 +408,16 @@ export default class EntryPoint extends cc.Component {
 	// HELPERS:
 
 	private getIndex(x: number, y: number) {
+		// @idea reserve item `0` as a "valid" nil ?
 		return y * this.settings.width + x;
+	}
+
+	private checkInBounds(x: number, y: number): boolean {
+		if (x <  0)                    return false;
+		if (y <  0)                    return false;
+		if (x >= this.settings.width)  return false;
+		if (y >= this.settings.height) return false;
+		return true;
 	}
 
 	private getCellWidth(): number {

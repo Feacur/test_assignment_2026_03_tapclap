@@ -1,7 +1,7 @@
 import { Utils } from "./Utils";
 
 export enum TileType {
-	None = 0,
+	None = 0, // means "empty tile", but might be better to create and use an official one
 	Blue,
 	Green,
 	Purple,

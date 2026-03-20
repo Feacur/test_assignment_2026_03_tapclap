@@ -5,7 +5,8 @@ export abstract class Utils {
 	 * @param max Inclusive maximal random value.
 	 */
 	static randomRange(min: number, max: number) {
-		// @todo use seed
-		return Math.round(min + (max - min) * Math.random());
+		const t = Math.random(); // @todo use seed
+		const raw = min * (t - 1) + max * t;
+		return Math.round(raw);
 	}
 }
