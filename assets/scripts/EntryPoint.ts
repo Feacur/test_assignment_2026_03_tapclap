@@ -438,8 +438,8 @@ export default class EntryPoint extends cc.Component {
 	private createEventHanler(handler: string): cc.Component.EventHandler {
 		const ret = new cc.Component.EventHandler();
 		ret.target = this.node;
-		ret.component = EntryPoint.name;
-		ret.handler = handler;
+		ret.component = "EntryPoint"; // `EntryPoint.name` will be null in the build
+		ret.handler = handler; // `function.name` is null in dev mode anyway
 		return ret;
 	}
 }
