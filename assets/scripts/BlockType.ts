@@ -7,8 +7,8 @@ export enum BlockType {
 	Yellow,
 	BombTiny,
 	BombHuge,
-	RocketsVertical,
-	RocketsHorizontal,
+	RocketsVert,
+	RocketsHori,
 	__COUNT__,
 }
 
@@ -17,16 +17,16 @@ export abstract class BlockTypeGenerator {
 	private static weightsSum: number = 0;
 	public static _initialize(): void {
 		// @note explicitly set weight just for type safety
-		BlockTypeGenerator.weights[BlockType.None]              = 0;
-		BlockTypeGenerator.weights[BlockType.Blue]              = 100;
-		BlockTypeGenerator.weights[BlockType.Green]             = 100;
-		BlockTypeGenerator.weights[BlockType.Purple]            = 100;
-		BlockTypeGenerator.weights[BlockType.Red]               = 100;
-		BlockTypeGenerator.weights[BlockType.Yellow]            = 100;
-		BlockTypeGenerator.weights[BlockType.BombTiny]          = 10;
-		BlockTypeGenerator.weights[BlockType.BombHuge]          = 5;
-		BlockTypeGenerator.weights[BlockType.RocketsVertical]   = 10;
-		BlockTypeGenerator.weights[BlockType.RocketsHorizontal] = 10;
+		BlockTypeGenerator.weights[BlockType.None]        = 0;
+		BlockTypeGenerator.weights[BlockType.Blue]        = 100;
+		BlockTypeGenerator.weights[BlockType.Green]       = 100;
+		BlockTypeGenerator.weights[BlockType.Purple]      = 100;
+		BlockTypeGenerator.weights[BlockType.Red]         = 100;
+		BlockTypeGenerator.weights[BlockType.Yellow]      = 100;
+		BlockTypeGenerator.weights[BlockType.BombTiny]    = 10;
+		BlockTypeGenerator.weights[BlockType.BombHuge]    = 5;
+		BlockTypeGenerator.weights[BlockType.RocketsVert] = 10;
+		BlockTypeGenerator.weights[BlockType.RocketsHori] = 10;
 		//
 		BlockTypeGenerator.weightsSum = 0;
 		for (let index = 0; index < BlockTypeGenerator.weights.length; index++)
@@ -48,16 +48,16 @@ export abstract class BlockTypeValue {
 	private static points: number[] = new Array(BlockType.__COUNT__);
 	public static _initialize(): void {
 		// @note explicitly set weight just for type safety
-		BlockTypeValue.points[BlockType.None]              = 0;
-		BlockTypeValue.points[BlockType.Blue]              = 1;
-		BlockTypeValue.points[BlockType.Green]             = 1;
-		BlockTypeValue.points[BlockType.Purple]            = 1;
-		BlockTypeValue.points[BlockType.Red]               = 1;
-		BlockTypeValue.points[BlockType.Yellow]            = 1;
-		BlockTypeValue.points[BlockType.BombTiny]          = 3;
-		BlockTypeValue.points[BlockType.BombHuge]          = 4;
-		BlockTypeValue.points[BlockType.RocketsVertical]   = 2;
-		BlockTypeValue.points[BlockType.RocketsHorizontal] = 2;
+		BlockTypeValue.points[BlockType.None]        = 0;
+		BlockTypeValue.points[BlockType.Blue]        = 1;
+		BlockTypeValue.points[BlockType.Green]       = 1;
+		BlockTypeValue.points[BlockType.Purple]      = 1;
+		BlockTypeValue.points[BlockType.Red]         = 1;
+		BlockTypeValue.points[BlockType.Yellow]      = 1;
+		BlockTypeValue.points[BlockType.BombTiny]    = 3;
+		BlockTypeValue.points[BlockType.BombHuge]    = 4;
+		BlockTypeValue.points[BlockType.RocketsVert] = 2;
+		BlockTypeValue.points[BlockType.RocketsHori] = 2;
 	}
 
 	public static get(blockType: BlockType): number {
@@ -145,10 +145,11 @@ export abstract class BlockTypeUtils {
 	}
 
 	static getWipeRadius(blockType: BlockType): number {
-		// @note harcode to bombs, but with small moifications it's possible to make wide rocket lines
 		switch (blockType) {
-			case BlockType.BombTiny: return 1;
-			case BlockType.BombHuge: return 2;
+			case BlockType.BombTiny:    return 1;
+			case BlockType.BombHuge:    return 2;
+			case BlockType.RocketsVert: return 0;
+			case BlockType.RocketsHori: return 0;
 		}
 		return 0;
 	}

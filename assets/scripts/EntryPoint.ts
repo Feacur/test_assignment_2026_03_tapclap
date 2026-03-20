@@ -265,48 +265,45 @@ export default class EntryPoint extends cc.Component {
 			if (progress < 1) done = false;
 
 			switch (message.eventType) {
-				case EventType.Wipe: {
-					const visualType = progress < 0.8 ? message.source.type : message.target.type;
-					this.updateBlock(message.target.x, message.target.y, visualType);
-				} break;
-
-				case EventType.Init:
-				case EventType.Fill:
-				case EventType.Move:
-				case EventType.Yank: {
-					const visualType = message.target.type;
-					this.updateBlock(message.target.x, message.target.y, visualType);
-				} break;
-			}
-
-			switch (message.eventType) {
-				case EventType.Move: {
-					const visualX = cc.lerp(message.source.x, message.target.x, progress);
-					const visualY = cc.lerp(message.source.y, message.target.y, progress);
-					this.setBlockVisualPosition(instance, visualX, visualY);
-				} break;
-			}
-
-			switch (message.eventType) {
 				case EventType.Errr: {
 					const amplitude = 20;
 					const frequency = Math.PI * 2;
 					instance.rotation = amplitude * Math.sin(frequency * progress);
 				} break;
 
-				case EventType.Init:
-				case EventType.Fill:
+				case EventType.Init: {
 					instance.scale = progress;
-					break;
+					const visualType = message.target.type;
+					this.updateBlock(message.target.x, message.target.y, visualType);
+				} break;
 
-				case EventType.Yank:
-				case EventType.Wipe:
+				case EventType.Fill: {
+					instance.scale = progress;
+					const visualType = message.target.type;
+					this.updateBlock(message.target.x, message.target.y, visualType);
+				} break;
+
+				case EventType.Wipe: {
 					instance.scale = 1 - progress;
-					break;
+					const visualType = progress < 0.8 ? message.source.type : message.target.type;
+					this.updateBlock(message.target.x, message.target.y, visualType);
+				} break;
 
-				case EventType.Move:
+				case EventType.Yank: {
+					instance.scale = 1 - progress;
+					const visualType = message.target.type;
+					this.updateBlock(message.target.x, message.target.y, visualType);
+				} break;
+
+				case EventType.Move: {
 					instance.scale = 1;
-					break;
+					const visualType = message.target.type;
+					this.updateBlock(message.target.x, message.target.y, visualType);
+
+					const visualX = cc.lerp(message.source.x, message.target.x, progress);
+					const visualY = cc.lerp(message.source.y, message.target.y, progress);
+					this.setBlockVisualPosition(instance, visualX, visualY);
+				} break;
 			}
 		}
 

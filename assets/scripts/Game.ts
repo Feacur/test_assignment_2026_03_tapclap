@@ -3,10 +3,10 @@ import { EventType, GameProxy } from "./GameProxy";
 
 enum GameState {
 	None = 0,
-	Fill,
-	Input,
-	Process,
-	Anim,
+	ProcessBoard,
+	InputQueue,
+	ProcessQueue,
+	Animate,
 }
 
 export class Game {
@@ -57,7 +57,7 @@ export class Game {
 	}
 
 	inputTouchBlock(x: number, y: number): void {
-		if (this.state != GameState.Input) return;
+		if (this.state != GameState.InputQueue) return;
 		this.queue.length = 0; // @note only a single block can be triggered by input
 		if (x >= 0 && x < this.size.x && y >= 0 && y < this.size.y) {
 			const index = this.getIndex(x, y);
@@ -71,11 +71,11 @@ export class Game {
 		while (true) {
 			const previousState = this.state;
 			switch (previousState) {
-				case GameState.None:    this.doStateNone();    break;
-				case GameState.Fill:    this.doStateFill();    break;
-				case GameState.Input:   this.doStateInput();   break;
-				case GameState.Process: this.doStateProcess(); break;
-				case GameState.Anim:    this.doStateAnim();    break;
+				case GameState.None:         this.doStateNone();         break;
+				case GameState.ProcessBoard: this.doStateProcessBoard(); break;
+				case GameState.InputQueue:   this.doStateInputQueue();   break;
+				case GameState.ProcessQueue: this.doStateProcessQueue(); break;
+				case GameState.Animate:      this.doStateAnimate();      break;
 			}
 			// @note waiting for input or animating, but processing
 			// can be spread thin over a few frames too as an optimization
@@ -88,10 +88,10 @@ export class Game {
 	private doStateNone(): void {
 		this.queue.length = 0;
 		this.queueIndex = 0;
-		this.state = GameState.Fill;
+		this.state = GameState.ProcessBoard;
 	}
 
-	private doStateFill(): void {
+	private doStateProcessBoard(): void { // @note can be time sliced
 		let change = false;
 
 		for (let sourceIdx = this.size.x; sourceIdx < this.blocks.length; sourceIdx++) {
@@ -100,12 +100,12 @@ export class Game {
 			const sourceType = this.blocks[sourceIdx];
 			if (BlockTypeUtils.canBeMoveSource(sourceType) && BlockTypeUtils.canBeMoveTarget(targetType)) {
 				const moveTrailType = BlockTypeUtils.getMoveTrailType(sourceType);
-				this.blocks[targetIdx] = sourceType;
 				this.blocks[sourceIdx] = moveTrailType;
+				this.blocks[targetIdx] = sourceType;
 				change = true;
 				if (this.proxy != null) {
-					this.proxyUpdateBlock(EventType.Move, sourceIdx, targetType, targetIdx, sourceType);
 					this.proxyUpdateBlock(EventType.Yank, sourceIdx, sourceType, sourceIdx, moveTrailType);
+					this.proxyUpdateBlock(EventType.Move, sourceIdx, targetType, targetIdx, sourceType);
 				}
 			}
 		}
@@ -122,11 +122,11 @@ export class Game {
 		}
 
 		this.state = change
-			? GameState.Anim
-			: GameState.Input;
+			? GameState.Animate
+			: GameState.InputQueue;
 	}
 
-	private doStateInput(): void {
+	private doStateInputQueue(): void {
 		if (this.queue.length == 0)
 			return; // @note idle
 
@@ -135,7 +135,7 @@ export class Game {
 			this.moves += 1;
 			if (this.proxy != null)
 				this.proxy.updateMoves(this.moves);
-			this.state = GameState.Process;
+			this.state = GameState.ProcessQueue;
 		}
 		else {
 			if (this.proxy != null) {
@@ -143,14 +143,15 @@ export class Game {
 				const blockType = this.blocks[index];
 				this.proxyUpdateBlock(EventType.Errr, index, blockType, index, blockType);
 			}
-			this.state = GameState.Anim;
+			this.state = GameState.Animate;
 		}
 	}
 
-	private doStateProcess(): void {
-		// @optimize processing can be time sliced as an option
+	private doStateProcessQueue(): void {
+		// @note processing can be time sliced as an optimization option
 		// but only would be sensible for insane synergized combinations
-		const timeSliceSize = this.size.x * this.size.y;
+		// say, if something generates new blocks and builds up the queue
+		const timeSliceSize = this.size.x * this.size.y * 10;
 		const nextTimeSliceIndex = Math.min(this.queueIndex + timeSliceSize, this.queue.length);
 		for (/*empty*/; this.queueIndex < nextTimeSliceIndex; this.queueIndex++) {
 			const index = this.queue[this.queueIndex];
@@ -166,19 +167,20 @@ export class Game {
 					this.proxyUpdateBlock(EventType.Wipe, index, blockType, index, wipeTrailType);
 			}
 
+			const wipeRadius = BlockTypeUtils.getWipeRadius(blockType);
 			switch (blockType) {
-				case BlockType.BombTiny:          this.doProcessArea(index, BlockTypeUtils.getWipeRadius(blockType)); break;
-				case BlockType.BombHuge:          this.doProcessArea(index, BlockTypeUtils.getWipeRadius(blockType)); break;
-				case BlockType.RocketsVertical:   this.doProcessVertical(index);                                      break;
-				case BlockType.RocketsHorizontal: this.doProcessHorizontal(index);                                    break;
+				case BlockType.BombTiny:    this.doProcessArea(index, wipeRadius); break;
+				case BlockType.BombHuge:    this.doProcessArea(index, wipeRadius); break;
+				case BlockType.RocketsVert: this.doProcessVert(index, wipeRadius); break;
+				case BlockType.RocketsHori: this.doProcessHori(index, wipeRadius); break;
 			}
 		}
 
 		if (this.queueIndex >= this.queue.length)
-			this.state = GameState.Anim;
+			this.state = GameState.Animate;
 	}
 
-	private doStateAnim(): void {
+	private doStateAnimate(): void {
 		if (this.proxy != null) { // @note idle
 			if (this.proxy.waitForAnim()) return;
 			this.proxy.updateScore(this.score);
@@ -188,32 +190,16 @@ export class Game {
 
 	// QUEUEING:
 
-	private queueOffsetAny(center: number, xOffset: number, yOffset: number): void {
-		const x = (center % this.size.x)           + xOffset;
-		const y = Math.floor(center / this.size.x) + yOffset;
-
-		if (x <  0)           return;
-		if (x >= this.size.x) return;
-		if (y <  0)           return;
-		if (y >= this.size.y) return;
-
-		const index = this.getIndex(x, y);
+	private queueSafeOffsetAny(index: number): void {
+		if (index < 0) return;
 		if (this.skips[index]) return;
 
 		this.skips[index] = true;
 		this.queue.push(index);
 	}
 
-	private queueOffsetMatching(center: number, xOffset: number, yOffset: number, matchBlockType: BlockType): void {
-		const x = (center % this.size.x)           + xOffset;
-		const y = Math.floor(center / this.size.x) + yOffset;
-
-		if (x <  0)           return;
-		if (x >= this.size.x) return;
-		if (y <  0)           return;
-		if (y >= this.size.y) return;
-
-		const index = this.getIndex(x, y);
+	private queueSafeOffsetMatching(index: number, matchBlockType: BlockType): void {
+		if (index < 0) return;
 		if (this.skips[index]) return;
 
 		const blockType = this.blocks[index];
@@ -232,10 +218,10 @@ export class Game {
 		if (BlockTypeUtils.isFloodFillable(blockType)) {
 			this.skips[index] = true;
 			for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
-				this.queueOffsetMatching(index, -1,  0, blockType);
-				this.queueOffsetMatching(index,  1,  0, blockType);
-				this.queueOffsetMatching(index,  0, -1, blockType);
-				this.queueOffsetMatching(index,  0,  1, blockType);
+				this.queueSafeOffsetMatching(this.getOffsetIndex(index, -1,  0), blockType);
+				this.queueSafeOffsetMatching(this.getOffsetIndex(index,  1,  0), blockType);
+				this.queueSafeOffsetMatching(this.getOffsetIndex(index,  0, -1), blockType);
+				this.queueSafeOffsetMatching(this.getOffsetIndex(index,  0,  1), blockType);
 	
 				if (nextIt >= this.queue.length) break;
 				index = this.queue[nextIt];
@@ -256,20 +242,20 @@ export class Game {
 		const yCenter = Math.floor(center / this.size.x);
 
 		let index = center;
-		this.skips[center] = true;
+		this.skips[index] = true;
 		for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
 			const x = (index % this.size.x);
 			const y = Math.floor(index / this.size.x);
 			if (Math.abs(x - xCenter) < radius && Math.abs(y - yCenter) < radius) {
-				this.queueOffsetAny(index, -1,  0);
-				this.queueOffsetAny(index,  1,  0);
-				this.queueOffsetAny(index,  0, -1);
-				this.queueOffsetAny(index,  0,  1);
+				this.queueSafeOffsetAny(this.getOffsetIndex(index, -1,  0));
+				this.queueSafeOffsetAny(this.getOffsetIndex(index,  1,  0));
+				this.queueSafeOffsetAny(this.getOffsetIndex(index,  0, -1));
+				this.queueSafeOffsetAny(this.getOffsetIndex(index,  0,  1));
 
-				this.queueOffsetAny(index, -1, -1);
-				this.queueOffsetAny(index,  1, -1);
-				this.queueOffsetAny(index, -1,  1);
-				this.queueOffsetAny(index,  1,  1);
+				this.queueSafeOffsetAny(this.getOffsetIndex(index, -1, -1));
+				this.queueSafeOffsetAny(this.getOffsetIndex(index,  1, -1));
+				this.queueSafeOffsetAny(this.getOffsetIndex(index, -1,  1));
+				this.queueSafeOffsetAny(this.getOffsetIndex(index,  1,  1));
 			}
 
 			if (nextIt >= this.queue.length) break;
@@ -278,28 +264,34 @@ export class Game {
 		this.resetSkips();
 	}
 
-	private doProcessVertical(center: number): void {
-		let index = center;
-		this.skips[center] = true;
-		for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
-			this.queueOffsetAny(index, 0, -1);
-			this.queueOffsetAny(index, 0,  1);
-
-			if (nextIt >= this.queue.length) break;
-			index = this.queue[nextIt];
+	private doProcessVert(center: number, radius: number): void {
+		for (let offset = -radius; offset <= radius; offset++) {
+			let index = this.getOffsetIndex(center, offset, 0);
+			if (index < 0) continue;
+			this.skips[index] = true;
+			for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
+				this.queueSafeOffsetAny(this.getOffsetIndex(index, 0, -1));
+				this.queueSafeOffsetAny(this.getOffsetIndex(index, 0,  1));
+				
+				if (nextIt >= this.queue.length) break;
+				index = this.queue[nextIt];
+			}
 		}
 		this.resetSkips();
 	}
 
-	private doProcessHorizontal(center: number): void {
-		let index = center;
-		this.skips[center] = true;
-		for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
-			this.queueOffsetAny(index, -1, 0);
-			this.queueOffsetAny(index,  1, 0);
-
-			if (nextIt >= this.queue.length) break;
-			index = this.queue[nextIt];
+	private doProcessHori(center: number, radius: number): void {
+		for (let offset = -radius; offset <= radius; offset++) {
+			let index = this.getOffsetIndex(center, 0, offset);
+			if (index < 0) continue;
+			this.skips[index] = true;
+			for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
+				this.queueSafeOffsetAny(this.getOffsetIndex(index, -1, 0));
+				this.queueSafeOffsetAny(this.getOffsetIndex(index,  1, 0));
+				
+				if (nextIt >= this.queue.length) break;
+				index = this.queue[nextIt];
+			}
 		}
 		this.resetSkips();
 	}
@@ -308,6 +300,19 @@ export class Game {
 
 	private getIndex(x: number, y: number): number {
 		const ret = y * this.size.x + x;
+		return ret;
+	}
+
+	private getOffsetIndex(center: number, xOffset: number, yOffset: number): number {
+		const x = (center % this.size.x)           + xOffset;
+		const y = Math.floor(center / this.size.x) + yOffset;
+
+		if (x <  0)           return -1;
+		if (x >= this.size.x) return -1;
+		if (y <  0)           return -1;
+		if (y >= this.size.y) return -1;
+
+		const ret = this.getIndex(x, y);
 		return ret;
 	}
 
