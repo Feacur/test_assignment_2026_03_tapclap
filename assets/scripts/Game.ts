@@ -120,6 +120,21 @@ export class Game {
 
 	// LOGIC:
 
+	regenerateTiles(): void {
+		const eventType = this.regen == 0
+			? TileEvent.Initialize
+			: TileEvent.Shuffle;
+
+		this.regen += 1;
+		for (let index = 0; index < this.tiles.length; index++) {
+			const sourceType = this.tiles[index];
+			const regenType = TileGenerator.generate();
+			this.tiles[index] = regenType;
+			if (this.proxy != null)
+				this.proxyUpdateTile(eventType, index, sourceType, index, regenType);
+		}
+	}
+
 	private doStateNone(): void {
 		this.queue.length = 0;
 		this.queueIndex = 0;
@@ -240,7 +255,12 @@ export class Game {
 		this.state = GameState.None;
 	}
 
-	// QUEUEING:
+	// PROCESSING:
+
+	private resetSkips(): void {
+		for (let i = 0; i < this.skips.length; i++)
+			this.skips[i] = false;
+	}
 
 	private queueSafeOffsetAny(index: number): void {
 		if (index < 0) return;
@@ -260,8 +280,6 @@ export class Game {
 			this.queue.push(index);
 		}
 	}
-
-	// PROCESSING:
 
 	private floodFillIntoQueue(index: number): number {
 		if (this.skips[index]) return 0;
@@ -376,22 +394,6 @@ export class Game {
 
 	// HELPERS:
 
-	regenerateTiles(): void {
-		const eventType = this.regen == 0
-			? TileEvent.Initialize
-			: TileEvent.Shuffle;
-
-		this.regen += 1;
-		for (let index = 0; index < this.tiles.length; index++) {
-			const sourceType = this.tiles[index];
-			const regenType = TileGenerator.generate();
-			this.tiles[index] = regenType;
-			if (this.proxy != null)
-				this.proxyUpdateTile(eventType, index, sourceType, index, regenType);
-		}
-
-	}
-
 	private getIndex(x: number, y: number): number {
 		return y * this.settings.size.x + x;
 	}
@@ -406,11 +408,6 @@ export class Game {
 		if (y >= this.settings.size.y) return -1;
 
 		return this.getIndex(x, y);
-	}
-
-	private resetSkips(): void {
-		for (let i = 0; i < this.skips.length; i++)
-			this.skips[i] = false;
 	}
 
 	private proxyUpdateTile(eventType: TileEvent,

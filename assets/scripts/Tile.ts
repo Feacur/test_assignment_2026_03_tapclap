@@ -35,9 +35,9 @@ export abstract class TileGenerator {
 
 	public static generate(): TileType {
 		let rnd = Math.round(Math.random() * TileGenerator.weightsSum);
-		for (let index = 0; index < TileGenerator.weights.length; index++) {
-			rnd -= TileGenerator.weights[index];
-			if (rnd <= 0) return index;
+		for (let type = 0; type < TileGenerator.weights.length; type++) {
+			rnd -= TileGenerator.weights[type];
+			if (rnd <= 0) return type;
 		}
 		return 0;
 	}
@@ -61,8 +61,7 @@ export abstract class TileValue {
 	}
 
 	public static get(type: TileType): number {
-		const ret = TileValue.points[type];
-		return ret;
+		return TileValue.points[type];
 	}
 }
 TileValue._initialize();

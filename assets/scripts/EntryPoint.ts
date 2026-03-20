@@ -210,13 +210,6 @@ export default class EntryPoint extends cc.Component {
 		this.game.initialize(this.settings);
 	}
 
-	private setTileVisualPosition (instance: cc.Node, x: number, y: number): void {
-		instance.setPosition(
-			x * this.getCellWidth() + this.getCellPaddingLeft(),
-			y * this.getCellHeight() + this.getCellPaddingBottom()
-		);
-	}
-
 	private updateTile (x: number, y: number, type: TileType): void {
 		if (x >= 0 && x < this.settings.size.x && y >= 0 && y < this.settings.size.y) {
 			const index = this.getIndex(x, y);
@@ -240,27 +233,7 @@ export default class EntryPoint extends cc.Component {
 		this.winButton.node.active = state == StateEvent.Win;
 	}
 
-	// HELPERS:
-
-	private getIndex(x: number, y: number) {
-		return y * this.settings.size.x + x;
-	}
-
-	private getCellWidth(): number {
-		return this.grid.cellSize.width + this.grid.spacingX;
-	}
-
-	private getCellHeight(): number {
-		return this.grid.cellSize.height + this.grid.spacingY;
-	}
-
-	private getCellPaddingLeft(): number {
-		return this.grid.paddingLeft + this.tilePrefab.data.width * this.tilePrefab.data.anchorX;
-	}
-
-	private getCellPaddingBottom(): number {
-		return this.grid.paddingBottom + this.tilePrefab.data.height * this.tilePrefab.data.anchorY;
-	}
+	// MESSAGING:
 
 	private isAnimationBlocking(): boolean {
 		// @optimize or cache numbers on push and pop
@@ -380,6 +353,35 @@ export default class EntryPoint extends cc.Component {
 		// finalize
 		if (this.messagesSet == 0)
 			this.messagesTime = 0;
+	}
+
+	// HELPERS:
+
+	private getIndex(x: number, y: number) {
+		return y * this.settings.size.x + x;
+	}
+
+	private getCellWidth(): number {
+		return this.grid.cellSize.width + this.grid.spacingX;
+	}
+
+	private getCellHeight(): number {
+		return this.grid.cellSize.height + this.grid.spacingY;
+	}
+
+	private getCellPaddingLeft(): number {
+		return this.grid.paddingLeft + this.tilePrefab.data.width * this.tilePrefab.data.anchorX;
+	}
+
+	private getCellPaddingBottom(): number {
+		return this.grid.paddingBottom + this.tilePrefab.data.height * this.tilePrefab.data.anchorY;
+	}
+
+	private setTileVisualPosition (instance: cc.Node, x: number, y: number): void {
+		instance.setPosition(
+			x * this.getCellWidth() + this.getCellPaddingLeft(),
+			y * this.getCellHeight() + this.getCellPaddingBottom()
+		);
 	}
 
 	private createEventHanler(handler: string): cc.Component.EventHandler {
