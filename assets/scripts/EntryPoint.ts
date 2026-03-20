@@ -5,22 +5,22 @@
 // Learn life-cycle s:
 //  - https://docs.cocos.com/creator/2.4/manual/en/scripting/life-cycle-s.html
 
-import { BlockType } from "./Block";
+import { TileType } from "./Tile";
 import { Game } from "./Game";
 import { EventType, GameProxy } from "./GameProxy";
 
 const {ccclass, property} = cc._decorator;
 
-class Block {
+class Tile {
 	x: number;
 	y: number;
-	type: BlockType;
+	type: TileType;
 }
 
 class Message {
 	eventType: EventType;
-	source: Block = new Block();
-	target: Block = new Block();
+	source: Tile = new Tile();
+	target: Tile = new Tile();
 
 	getDuration(): number {
 		switch (this.eventType) {
@@ -59,16 +59,16 @@ export default class EntryPoint extends cc.Component {
 	grid: cc.Layout = null;
 
 	@property(cc.Prefab)
-	blockPrefab: cc.Prefab = null;
+	tilePrefab: cc.Prefab = null;
 
 	@property(cc.SpriteFrame)
-	blockSpriteFrames: cc.SpriteFrame[] = new Array(BlockType.__COUNT__);
+	tileSpriteFrames: cc.SpriteFrame[] = new Array(TileType.__COUNT__);
 
 	@property(cc.Vec2)
 	gridSize: cc.Vec2 = new cc.Vec2(5, 5);
 
 	private gameProxy: GameProxy = null;
-	private blocks: cc.Node[] = null;
+	private tiles: cc.Node[] = null;
 	private game: Game = null;
 
 	private messages: Message[] = []
@@ -93,9 +93,9 @@ export default class EntryPoint extends cc.Component {
 		this.boosterBombButton.clickEvents.push(boosterBombEventHandler);
 
 		this.grid.enabled = false;
-		if (this.blockSpriteFrames.length != BlockType.__COUNT__) {
-			this.blockSpriteFrames.length = BlockType.__COUNT__;
-			console.log("[warn] `blockSpriteFrames` length reset to %d", BlockType.__COUNT__);
+		if (this.tileSpriteFrames.length != TileType.__COUNT__) {
+			this.tileSpriteFrames.length = TileType.__COUNT__;
+			console.log("[warn] `tileSpriteFrames` length reset to %d", TileType.__COUNT__);
 		}
 
 		this.gridSize.x = Math.floor(this.gridSize.x);
@@ -104,9 +104,9 @@ export default class EntryPoint extends cc.Component {
 		if (this.gridSize.y > 9) this.gridSize.y = 9;
 
 		this.gameProxy = new GameProxy();
-		this.gameProxy.updateBlock = (eventType: EventType,
-			sourceX: number, sourceY: number, sourceType: BlockType,
-			targetX: number, targetY: number, targetType: BlockType
+		this.gameProxy.updateTile = (eventType: EventType,
+			sourceX: number, sourceY: number, sourceType: TileType,
+			targetX: number, targetY: number, targetType: TileType
 		) => {
 			this.pushMessage(eventType,
 				sourceX, sourceY, sourceType,
@@ -144,7 +144,7 @@ export default class EntryPoint extends cc.Component {
 		const x = Math.floor((pos.x - baseX) / this.getCellWidth());
 		const y = Math.floor((pos.y - baseY) / this.getCellHeight());
 		if (x >= 0 && x < this.gridSize.x && y >= 0 && y < this.gridSize.y)
-			this.game.inputTouchBlock(x, y);
+			this.game.inputTouchTile(x, y);
 	}
 
 	private boosterTeleOnClick (event: Event, customEventData: string): void {
@@ -158,42 +158,42 @@ export default class EntryPoint extends cc.Component {
 	// LOGIC:
 
 	private initializeGame (): void {
-		// @todo reuse blocks on reinit or at least despawn them
-		this.blocks = new Array(this.gridSize.x * this.gridSize.y);
+		// @todo reuse tiles on reinit or at least despawn them
+		this.tiles = new Array(this.gridSize.x * this.gridSize.y);
 		for (let y = 0; y < this.gridSize.y; y++) {
 			for (let x = 0; x < this.gridSize.x; x++) {
-				const instance = cc.instantiate(this.blockPrefab);
+				const instance = cc.instantiate(this.tilePrefab);
 				const index = this.getIndex(x, y);
-				this.blocks[index] = instance;
+				this.tiles[index] = instance;
 			}
 		}
 
 		for (let y = 0; y < this.gridSize.y; y++) {
 			for (let x = 0; x < this.gridSize.x; x++) {
 				const index = this.getIndex(x, y);
-				let instance = this.blocks[index];
+				let instance = this.tiles[index];
 				instance.parent = this.grid.node;
-				this.setBlockVisualPosition(instance, x, y);
+				this.setTileVisualPosition(instance, x, y);
 			}
 		}
 
 		this.game = new Game(this.gridSize, this.gameProxy);
-		this.game.reinitBlocks();
+		this.game.reinitTiles();
 	}
 
-	private setBlockVisualPosition (instance: cc.Node, x: number, y: number): void {
+	private setTileVisualPosition (instance: cc.Node, x: number, y: number): void {
 		instance.setPosition(
 			x * this.getCellWidth() + this.getCellPaddingLeft(),
 			y * this.getCellHeight() + this.getCellPaddingBottom()
 		);
 	}
 
-	private updateBlock (x: number, y: number, blockType: BlockType): void {
+	private updateTile (x: number, y: number, type: TileType): void {
 		if (x >= 0 && x < this.gridSize.x && y >= 0 && y < this.gridSize.y) {
 			const index = this.getIndex(x, y);
-			const instance = this.blocks[index];
+			const instance = this.tiles[index];
 			const sprite = instance.getComponent(cc.Sprite);
-			sprite.spriteFrame = this.blockSpriteFrames[blockType];
+			sprite.spriteFrame = this.tileSpriteFrames[type];
 		}
 	}
 
@@ -221,16 +221,16 @@ export default class EntryPoint extends cc.Component {
 	}
 
 	private getCellPaddingLeft(): number {
-		return this.grid.paddingLeft + this.blockPrefab.data.width * this.blockPrefab.data.anchorX;
+		return this.grid.paddingLeft + this.tilePrefab.data.width * this.tilePrefab.data.anchorX;
 	}
 
 	private getCellPaddingBottom(): number {
-		return this.grid.paddingBottom + this.blockPrefab.data.height * this.blockPrefab.data.anchorY;
+		return this.grid.paddingBottom + this.tilePrefab.data.height * this.tilePrefab.data.anchorY;
 	}
 
 	private pushMessage(eventType: EventType,
-		sourceX: number, sourceY: number, sourceType: BlockType,
-		targetX: number, targetY: number, targetType: BlockType
+		sourceX: number, sourceY: number, sourceType: TileType,
+		targetX: number, targetY: number, targetType: TileType
 	) {
 		if (this.messagesSet >= this.messages.length)
 			this.messages.push(new Message());
@@ -258,7 +258,7 @@ export default class EntryPoint extends cc.Component {
 		for (let it = 0; it < this.messagesSet; it++) {
 			const message = this.messages[it];
 			const index = this.getIndex(message.target.x, message.target.y);
-			const instance = this.blocks[index];
+			const instance = this.tiles[index];
 			const duration = message.getDuration();
 			const progress = duration > 0 ? Math.min(this.messagesTime / duration, 1) : 1;
 
@@ -274,35 +274,35 @@ export default class EntryPoint extends cc.Component {
 				case EventType.Init: {
 					instance.scale = progress;
 					const visualType = message.target.type;
-					this.updateBlock(message.target.x, message.target.y, visualType);
+					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
 				case EventType.Fill: {
 					instance.scale = progress;
 					const visualType = message.target.type;
-					this.updateBlock(message.target.x, message.target.y, visualType);
+					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
 				case EventType.Wipe: {
 					instance.scale = 1 - progress;
 					const visualType = progress < 0.8 ? message.source.type : message.target.type;
-					this.updateBlock(message.target.x, message.target.y, visualType);
+					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
 				case EventType.Yank: {
 					instance.scale = 1 - progress;
 					const visualType = message.target.type;
-					this.updateBlock(message.target.x, message.target.y, visualType);
+					this.updateTile(message.target.x, message.target.y, visualType);
 				} break;
 
 				case EventType.Move: {
 					instance.scale = 1;
 					const visualType = message.target.type;
-					this.updateBlock(message.target.x, message.target.y, visualType);
+					this.updateTile(message.target.x, message.target.y, visualType);
 
 					const visualX = cc.lerp(message.source.x, message.target.x, progress);
 					const visualY = cc.lerp(message.source.y, message.target.y, progress);
-					this.setBlockVisualPosition(instance, visualX, visualY);
+					this.setTileVisualPosition(instance, visualX, visualY);
 				} break;
 			}
 		}

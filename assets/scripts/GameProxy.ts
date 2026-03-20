@@ -1,4 +1,4 @@
-import { BlockType } from "./Block";
+import { TileType } from "./Tile";
 
 export enum EventType {
 	None = 0,
@@ -10,11 +10,11 @@ export enum EventType {
 	Move, // changed position
 };
 
-interface BlockDelegate {
+interface TileDelegate {
 	(
 		eventType: EventType,
-		sourceX: number, sourceY: number, sourceType: BlockType,
-		targetX: number, targetY: number, targetType: BlockType
+		sourceX: number, sourceY: number, sourceType: TileType,
+		targetX: number, targetY: number, targetType: TileType
 	): void;
 }
 
@@ -27,8 +27,8 @@ interface GetBoolDelegate {
 }
 
 export class GameProxy {
-	updateBlock: BlockDelegate = null;
-	updateMoves: NumberDelegate = null;
-	updateScore: NumberDelegate = null;
+	updateTile:  TileDelegate    = null;
+	updateMoves: NumberDelegate  = null;
+	updateScore: NumberDelegate  = null;
 	waitForAnim: GetBoolDelegate = null;
 }

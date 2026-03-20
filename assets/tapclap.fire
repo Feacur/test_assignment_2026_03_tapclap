@@ -2623,10 +2623,10 @@
     "grid": {
       "__id__": 26
     },
-    "blockPrefab": {
+    "tilePrefab": {
       "__uuid__": "e399083f-2a86-4934-8ac7-9141db78864a"
     },
-    "blockSpriteFrames": [
+    "tileSpriteFrames": [
       null,
       {
         "__uuid__": "8476a690-dd5c-4eb9-9013-0d7de00780ee"

@@ -1,4 +1,4 @@
-import { BlockType, BlockTypeGenerator, BlockTypeUtils, BlockTypeValue } from "./Block"
+import { TileType, TileGenerator, TileUtils, TileValue } from "./Tile"
 import { EventType, GameProxy } from "./GameProxy";
 
 enum GameState {
@@ -15,7 +15,7 @@ export class Game {
 
 	private state: GameState = GameState.None;
 
-	private blocks: BlockType[] = null
+	private tiles: TileType[] = null
 	private skips: boolean[] = null
 
 	private inits: number = 0;
@@ -30,39 +30,39 @@ export class Game {
 		this.size.y = size.y;
 		this.proxy = proxy;
 
-		this.blocks = new Array(size.x * size.y);
+		this.tiles = new Array(size.x * size.y);
 		this.skips = new Array(size.x * size.y);
 	}
 
 	// API:
 
-	reinitBlocks(): void {
+	reinitTiles(): void {
 		this.inits += 1;
 		for (let y = 0; y < this.size.y; y++) {
 			for (let x = 0; x < this.size.x; x++) {
 				const index = this.getIndex(x, y);
-				const blockType = BlockTypeGenerator.generate();
-				this.blocks[index] = blockType;
+				const type = TileGenerator.generate();
+				this.tiles[index] = type;
 			}
 		}
 
 		if (this.proxy != null) {
-			for (let index = 0; index < this.blocks.length; index++) {
-				const blockType = this.blocks[index];
-				this.proxyUpdateBlock(EventType.Init, index, blockType, index, blockType);
+			for (let index = 0; index < this.tiles.length; index++) {
+				const type = this.tiles[index];
+				this.proxyUpdateTile(EventType.Init, index, type, index, type);
 			}
 			this.proxy.updateMoves(this.moves);
 			this.proxy.updateScore(this.score);
 		}
 	}
 
-	inputTouchBlock(x: number, y: number): void {
+	inputTouchTile(x: number, y: number): void {
 		if (this.state != GameState.InputQueue) return;
-		this.queue.length = 0; // @note only a single block can be triggered by input
+		this.queue.length = 0; // @note only a single tile can be triggered by input
 		if (x >= 0 && x < this.size.x && y >= 0 && y < this.size.y) {
 			const index = this.getIndex(x, y);
-			const blockType = this.blocks[index];
-			if (BlockTypeUtils.isTouchanble(blockType))
+			const type = this.tiles[index];
+			if (TileUtils.isTouchanble(type))
 				this.queue.push(index);
 		}
 	}
@@ -94,30 +94,30 @@ export class Game {
 	private doStateProcessBoard(): void { // @note can be time sliced
 		let change = false;
 
-		for (let sourceIdx = this.size.x; sourceIdx < this.blocks.length; sourceIdx++) {
+		for (let sourceIdx = this.size.x; sourceIdx < this.tiles.length; sourceIdx++) {
 			const targetIdx = sourceIdx  - this.size.x;
-			const targetType = this.blocks[targetIdx];
-			const sourceType = this.blocks[sourceIdx];
-			if (BlockTypeUtils.canBeMoveSource(sourceType) && BlockTypeUtils.canBeMoveTarget(targetType)) {
-				const moveTrailType = BlockTypeUtils.getMoveTrailType(sourceType);
-				this.blocks[sourceIdx] = moveTrailType;
-				this.blocks[targetIdx] = sourceType;
+			const targetType = this.tiles[targetIdx];
+			const sourceType = this.tiles[sourceIdx];
+			if (TileUtils.canBeMoveSource(sourceType) && TileUtils.canBeMoveTarget(targetType)) {
+				const moveTrailType = TileUtils.getMoveTrailType(sourceType);
+				this.tiles[sourceIdx] = moveTrailType;
+				this.tiles[targetIdx] = sourceType;
 				change = true;
 				if (this.proxy != null) {
-					this.proxyUpdateBlock(EventType.Yank, sourceIdx, sourceType, sourceIdx, moveTrailType);
-					this.proxyUpdateBlock(EventType.Move, sourceIdx, targetType, targetIdx, sourceType);
+					this.proxyUpdateTile(EventType.Yank, sourceIdx, sourceType, sourceIdx, moveTrailType);
+					this.proxyUpdateTile(EventType.Move, sourceIdx, targetType, targetIdx, sourceType);
 				}
 			}
 		}
 
-		for (let index = this.blocks.length - this.size.x; index < this.blocks.length; index++) {
-			const blockType = this.blocks[index];
-			if (BlockTypeUtils.isFillable(blockType)) {
-				const nextBlockType = BlockTypeGenerator.generate();
-				this.blocks[index] = nextBlockType;
+		for (let index = this.tiles.length - this.size.x; index < this.tiles.length; index++) {
+			const type = this.tiles[index];
+			if (TileUtils.isFillable(type)) {
+				const nextType = TileGenerator.generate();
+				this.tiles[index] = nextType;
 				change = true;
 				if (this.proxy != null)
-					this.proxyUpdateBlock(EventType.Fill, index, blockType, index, nextBlockType);
+					this.proxyUpdateTile(EventType.Fill, index, type, index, nextType);
 			}
 		}
 
@@ -140,8 +140,8 @@ export class Game {
 		else {
 			if (this.proxy != null) {
 				let index = this.queue[0];
-				const blockType = this.blocks[index];
-				this.proxyUpdateBlock(EventType.Errr, index, blockType, index, blockType);
+				const type = this.tiles[index];
+				this.proxyUpdateTile(EventType.Errr, index, type, index, type);
 			}
 			this.state = GameState.Animate;
 		}
@@ -150,29 +150,29 @@ export class Game {
 	private doStateProcessQueue(): void {
 		// @note processing can be time sliced as an optimization option
 		// but only would be sensible for insane synergized combinations
-		// say, if something generates new blocks and builds up the queue
+		// say, if something generates new tiles and builds up the queue
 		const timeSliceSize = this.size.x * this.size.y * 10;
 		const nextTimeSliceIndex = Math.min(this.queueIndex + timeSliceSize, this.queue.length);
 		for (/*empty*/; this.queueIndex < nextTimeSliceIndex; this.queueIndex++) {
 			const index = this.queue[this.queueIndex];
-			const blockType = this.blocks[index];
+			const type = this.tiles[index];
 
-			if (BlockTypeUtils.isDestructible(blockType)) {
-				const wipeTrailType = BlockTypeUtils.getWipeTrailType(blockType);
+			if (TileUtils.isDestructible(type)) {
+				const wipeTrailType = TileUtils.getWipeTrailType(type);
 
-				this.score += BlockTypeValue.get(blockType);
-				this.blocks[index] = wipeTrailType;
+				this.score += TileValue.get(type);
+				this.tiles[index] = wipeTrailType;
 
 				if (this.proxy != null)
-					this.proxyUpdateBlock(EventType.Wipe, index, blockType, index, wipeTrailType);
+					this.proxyUpdateTile(EventType.Wipe, index, type, index, wipeTrailType);
 			}
 
-			const wipeRadius = BlockTypeUtils.getWipeRadius(blockType);
-			switch (blockType) {
-				case BlockType.BombTiny:    this.doProcessArea(index, wipeRadius); break;
-				case BlockType.BombHuge:    this.doProcessArea(index, wipeRadius); break;
-				case BlockType.RocketsVert: this.doProcessVert(index, wipeRadius); break;
-				case BlockType.RocketsHori: this.doProcessHori(index, wipeRadius); break;
+			const wipeRadius = TileUtils.getWipeRadius(type);
+			switch (type) {
+				case TileType.BombTiny:    this.doProcessArea(index, wipeRadius); break;
+				case TileType.BombHuge:    this.doProcessArea(index, wipeRadius); break;
+				case TileType.RocketsVert: this.doProcessVert(index, wipeRadius); break;
+				case TileType.RocketsHori: this.doProcessHori(index, wipeRadius); break;
 			}
 		}
 
@@ -198,12 +198,12 @@ export class Game {
 		this.queue.push(index);
 	}
 
-	private queueSafeOffsetMatching(index: number, matchBlockType: BlockType): void {
+	private queueSafeOffsetMatching(index: number, matchType: TileType): void {
 		if (index < 0) return;
 		if (this.skips[index]) return;
 
-		const blockType = this.blocks[index];
-		if (BlockTypeUtils.matchFloodFill(blockType, matchBlockType)) {
+		const type = this.tiles[index];
+		if (TileUtils.matchFloodFill(type, matchType)) {
 			this.skips[index] = true;
 			this.queue.push(index);
 		}
@@ -213,15 +213,15 @@ export class Game {
 
 	private preprocessInputQueue(): void {
 		let index = this.queue[0];
-		const blockType = this.blocks[index];
+		const type = this.tiles[index];
 		
-		if (BlockTypeUtils.isFloodFillable(blockType)) {
+		if (TileUtils.isFloodFillable(type)) {
 			this.skips[index] = true;
 			for (let nextIt = this.queue.length; /*late check instead*/; nextIt++) {
-				this.queueSafeOffsetMatching(this.getOffsetIndex(index, -1,  0), blockType);
-				this.queueSafeOffsetMatching(this.getOffsetIndex(index,  1,  0), blockType);
-				this.queueSafeOffsetMatching(this.getOffsetIndex(index,  0, -1), blockType);
-				this.queueSafeOffsetMatching(this.getOffsetIndex(index,  0,  1), blockType);
+				this.queueSafeOffsetMatching(this.getOffsetIndex(index, -1,  0), type);
+				this.queueSafeOffsetMatching(this.getOffsetIndex(index,  1,  0), type);
+				this.queueSafeOffsetMatching(this.getOffsetIndex(index,  0, -1), type);
+				this.queueSafeOffsetMatching(this.getOffsetIndex(index,  0,  1), type);
 	
 				if (nextIt >= this.queue.length) break;
 				index = this.queue[nextIt];
@@ -232,9 +232,9 @@ export class Game {
 
 	private verifyInputQueue(): boolean {
 		let index = this.queue[0];
-		const blockType = this.blocks[index];
-		const minBlocksCountForWipe = BlockTypeUtils.getMinBlocksCountForWipe(blockType);
-		return this.queue.length >= minBlocksCountForWipe;
+		const type = this.tiles[index];
+		const minTilesCountForWipe = TileUtils.getMinTilesCountForWipe(type);
+		return this.queue.length >= minTilesCountForWipe;
 	}
 
 	private doProcessArea(center: number, radius: number): void {
@@ -321,15 +321,15 @@ export class Game {
 			this.skips[i] = false;
 	}
 
-	private proxyUpdateBlock(eventType: EventType,
-		sourceIndex: number, sourceType: BlockType,
-		targetIndex: number, targetType: BlockType
+	private proxyUpdateTile(eventType: EventType,
+		sourceIndex: number, sourceType: TileType,
+		targetIndex: number, targetType: TileType
 	): void {
 		const sourceX = sourceIndex % this.size.x;
 		const sourceY = Math.floor(sourceIndex / this.size.x);
 		const targetX = targetIndex % this.size.x;
 		const targetY = Math.floor(targetIndex / this.size.x);
-		this.proxy.updateBlock(eventType,
+		this.proxy.updateTile(eventType,
 			sourceX, sourceY, sourceType,
 			targetX, targetY, targetType
 		);
