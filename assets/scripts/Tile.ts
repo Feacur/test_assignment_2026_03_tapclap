@@ -70,12 +70,11 @@ export abstract class TileValue {
 TileValue._initialize();
 
 export abstract class TileUtils {
-	static isTouchanble(type: TileType): boolean {
-		switch (type) {
-			case TileType.None:
-				return false;
-		}
-		return true;
+	static canBeTouched(type: TileType): boolean {
+		// imagine a brick wall that can be damaged indirectly
+		// either by a bomb or a flood filled area nearby,
+		// but otherwise would be non-interactable
+		return type != TileType.None;
 	}
 
 	static getMinAreaToDamage(type: TileType): number {
@@ -91,10 +90,13 @@ export abstract class TileUtils {
 	}
 
 	static matchFloodFill(aType: TileType, bType: TileType): boolean {
+		// imagine synergies between, say, a rocket and a bomb
+		// will require logic changes though to be properly triggered,
+		// for example making its damaging path wider
 		return aType == bType;
 	}
 
-	static isFloodFillable(type: TileType): boolean {
+	static canBeFloodFilled(type: TileType): boolean {
 		switch (type) {
 			case TileType.Blue:
 			case TileType.Green:
@@ -106,51 +108,37 @@ export abstract class TileUtils {
 		return false;
 	}
 
-	static isDestructible(type: TileType): boolean {
-		switch (type) {
-			case TileType.None:
-				return false;
-		}
-		return true;
+	static canBeDamaged(type: TileType): boolean {
+		return type != TileType.None;
 	}
 
 	static canBeTeleported(type: TileType): boolean {
-		switch (type) {
-			case TileType.None:
-				return false;
-		}
-		return true;
+		return type != TileType.None;
 	}
 
-	static canBeMoveSource(type: TileType): boolean {
-		switch (type) {
-			case TileType.None:
-				return false;
-		}
-		return true;
+	static canBeSpawnTarget(type: TileType): boolean {
+		return type == TileType.None;
 	}
 
-	static canBeMoveTarget(type: TileType): boolean {
-		switch (type) {
-			case TileType.None:
-				return true;
-		}
-		return false;
+	static isMovePossible(sourceType: TileType, targetType: TileType): boolean {
+		// imagine a spiked object falling onto a ball
+		return sourceType != TileType.None
+		/**/&& targetType == TileType.None;
 	}
 
-	static isFillable(type: TileType): boolean {
-		switch (type) {
-			case TileType.None:
-				return true;
-		}
-		return false;
-	}
-
-	static getTrailType(type: TileType): TileType {
+	static getTrailType(sourceType: TileType, targetType: TileType): TileType {
+		// imagine a slime block that leaves behind a trail when it moves
+		// or that may be a pipe which ejects new blocks to the board
 		return TileType.None;
 	}
 
+	static getMovedType(sourceType: TileType, targetType: TileType): TileType {
+		// imagine an ice block that melts if moved
+		return sourceType;
+	}
+
 	static getDamagedType(type: TileType): TileType {
+		// imagine a chest that leaves a gem behind
 		return TileType.None;
 	}
 

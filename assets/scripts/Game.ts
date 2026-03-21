@@ -104,7 +104,7 @@ export class Game {
 
 		if (this.state == GameState.InputQueue) {
 			this.queue.length = 0; // @note only a single tile can be triggered by input
-			if (TileUtils.isTouchanble(type)) {
+			if (TileUtils.canBeTouched(type)) {
 				this.queue.push(index);
 				return true; // input has been recorded for later
 			}
@@ -148,7 +148,7 @@ export class Game {
 				} break;
 		
 				case BoostType.Bomb: {
-					const isValid = TileUtils.isDestructible(targetType);
+					const isValid = TileUtils.canBeDamaged(targetType);
 					if (isValid) {
 						const radius = 2;
 						this.queue.push(targetIdx);
@@ -236,19 +236,20 @@ export class Game {
 			const targetIdx = sourceIdx  - this.settings.width;
 			const targetType = this.tiles[targetIdx];
 			const sourceType = this.tiles[sourceIdx];
-			if (TileUtils.canBeMoveSource(sourceType) && TileUtils.canBeMoveTarget(targetType)) {
-				const trailType = TileUtils.getTrailType(sourceType);
+			if (TileUtils.isMovePossible(sourceType, targetType)) {
+				const trailType = TileUtils.getTrailType(sourceType, targetType);
+				const movedType = TileUtils.getMovedType(sourceType, targetType);
 				this.tiles[sourceIdx] = trailType;
-				this.tiles[targetIdx] = sourceType;
+				this.tiles[targetIdx] = movedType;
 				this.proxyUpdateTile(TileEvent.Trail, sourceIdx, sourceType, sourceIdx, trailType);
-				this.proxyUpdateTile(TileEvent.Moved, sourceIdx, targetType, targetIdx, sourceType);
+				this.proxyUpdateTile(TileEvent.Moved, sourceIdx, targetType, targetIdx, movedType);
 				change = true;
 			}
 		}
 
 		for (let index = this.tiles.length - this.settings.width; index < this.tiles.length; index++) {
 			const type = this.tiles[index];
-			if (TileUtils.isFillable(type)) {
+			if (TileUtils.canBeSpawnTarget(type)) {
 				const spawnType = TileGenerator.generate();
 				this.tiles[index] = spawnType;
 				this.proxyUpdateTile(TileEvent.Spawn, index, type, index, spawnType);
@@ -287,7 +288,7 @@ export class Game {
 			const index = this.queue[this.queueIndex];
 			const type = this.tiles[index];
 
-			if (TileUtils.isDestructible(type)) {
+			if (TileUtils.canBeDamaged(type)) {
 				const damagedType = TileUtils.getDamagedType(type);
 				this.score += TileValue.get(type);
 				this.tiles[index] = damagedType;
@@ -346,7 +347,7 @@ export class Game {
 		this.skips[index] = true;
 
 		const type = this.tiles[index];
-		if (!TileUtils.isFloodFillable(type))
+		if (!TileUtils.canBeFloodFilled(type))
 			return 1; // only the tile itself
 
 		const prevLength = this.queue.length;
